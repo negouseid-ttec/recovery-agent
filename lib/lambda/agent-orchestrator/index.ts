@@ -1,5 +1,5 @@
 /**
- * Agent Orchestrator — the brain of Benefits Concierge.
+ * Agent Orchestrator — the brain of Recovery Agent.
  *
  * Receives a normalized InboundMessage from any channel webhook,
  * loads/creates the cross-channel conversation state, calls Bedrock

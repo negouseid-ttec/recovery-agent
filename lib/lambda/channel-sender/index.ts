@@ -20,7 +20,7 @@ const ses = new SESv2Client({});
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const CONVERSATION_TABLE = process.env.CONVERSATION_TABLE!;
-const SES_FROM_EMAIL = process.env.SES_FROM_EMAIL ?? 'benefits@example.com';
+const SES_FROM_EMAIL = process.env.SES_FROM_EMAIL ?? 'recovery@example.com';
 const EUM_PHONE_POOL_ID = process.env.EUM_PHONE_POOL_ID ?? '';
 const RCS_AGENT_ID = process.env.RCS_AGENT_ID ?? '';
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
@@ -273,7 +273,7 @@ async function sendEmail(message: {
 async function sendEmailText(to: string, text: string) {
   return sendEmail({
     recipientId: to,
-    subject: 'Benefits Concierge Update',
+    subject: 'Recovery Agent — Account Update',
     htmlBody: `<p>${text.replace(/\n/g, '<br>')}</p>`,
     textBody: text,
   });
