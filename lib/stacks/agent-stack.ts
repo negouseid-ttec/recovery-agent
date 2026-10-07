@@ -114,8 +114,34 @@ export class AgentStack extends cdk.Stack {
     props.conversationTable.grantReadData(this.senderFunction);
     this.senderFunction.grantInvoke(this.orchestratorFunction);
 
+    // ── Proactive Outreach (escalation-ladder driver) ─────────────────────
+    const outreachFn = new nodejs.NodejsFunction(this, 'ProactiveOutreach', {
+      functionName: 'ra-proactive-outreach',
+      entry: path.join(lambdaDir, 'proactive-outreach', 'index.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      timeout: cdk.Duration.seconds(120),
+      environment: {
+        ACCOUNT_TABLE: props.accountTable.tableName,
+        SENDER_FUNCTION_NAME: this.senderFunction.functionName,
+        NODE_OPTIONS: '--enable-source-maps',
+      },
+      bundling,
+    });
+    props.accountTable.grantReadWriteData(outreachFn);
+    this.senderFunction.grantInvoke(outreachFn);
+
+    // Run the escalation ladder once a day (customers who stay silent escalate).
+    new cdk.aws_events.Rule(this, 'OutreachSchedule', {
+      schedule: cdk.aws_events.Schedule.rate(cdk.Duration.days(1)),
+      targets: [new cdk.aws_events_targets.LambdaFunction(outreachFn)],
+    });
+
     new cdk.CfnOutput(this, 'OrchestratorArn', { value: this.orchestratorFunction.functionArn });
     new cdk.CfnOutput(this, 'TriageArn', { value: this.triageFunction.functionArn });
     new cdk.CfnOutput(this, 'SenderArn', { value: this.senderFunction.functionArn });
+    new cdk.CfnOutput(this, 'OutreachArn', { value: outreachFn.functionArn });
   }
 }

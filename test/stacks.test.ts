@@ -25,8 +25,8 @@ describe('Recovery Agent infrastructure', () => {
     });
   });
 
-  test('Agent stack creates orchestrator, triage, and sender Lambdas', () => {
-    Template.fromStack(agent).resourceCountIs('AWS::Lambda::Function', 3);
+  test('Agent stack creates orchestrator, triage, sender, and outreach Lambdas', () => {
+    Template.fromStack(agent).resourceCountIs('AWS::Lambda::Function', 4);
   });
 
   test('Sender has EUM, Social Messaging, and SES permissions', () => {

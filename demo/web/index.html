@@ -74,39 +74,42 @@
   .jstep.done .jdot { font-size:0; } .jstep.done .jdot::after { font-size:15px; }
   .jlabel { font-size:11px; color:var(--ink); text-align:center; line-height:1.3; }
   .jsep { flex:1; max-width:40px; height:2px; background:#334155; margin-top:14px; }
+  .reason-banner { background:#052e2b; border:1px solid #0f766e; border-left:4px solid #2dd4bf; color:#99f6e4; border-radius:8px; padding:10px 16px; font-size:13px; line-height:1.4; text-align:center; animation:pop .3s ease; }
+  .silence-note { align-self:center; font-size:11px; color:#64748b; font-style:italic; background:rgba(100,116,139,.1); border-radius:999px; padding:4px 12px; animation:pop .3s ease; }
 </style>
 </head>
 <body>
   <header>
     <h1>💸 <span class="gradient-text">Recovery Agent</span></h1>
-    <p>Autonomous revenue recovery · one conversation across <b>SMS · RCS · WhatsApp · Email</b> · AWS Communication Developer Services</p>
+    <p>Omnichannel escalation ladder — cheapest channel first, escalate only on silence · AWS Communication Developer Services</p>
   </header>
   <div class="act-banner"><div class="act-pill" id="actPill"></div></div>
+  <div id="reasonSlot" style="max-width:900px;margin:0 auto 6px;min-height:40px"></div>
   <div class="phones">
-    <div class="phone sms" id="phone-sms"><div class="notch"></div><div class="app-bar"><div class="avatar">💬</div><div>Messages<span class="sub cds-tag">AWS End User Messaging · SMS</span></div></div><div class="screen" id="screen-sms"></div></div>
-    <div class="phone rcs" id="phone-rcs"><div class="notch"></div><div class="app-bar"><div class="avatar">💸</div><div>Recovery Agent<span class="sub cds-tag">AWS EUM · RCS</span></div></div><div class="screen" id="screen-rcs"></div></div>
-    <div class="phone whatsapp" id="phone-whatsapp"><div class="notch"></div><div class="app-bar"><div class="avatar">💸</div><div>Recovery Agent<span class="sub cds-tag">AWS EUM Social · WhatsApp</span></div></div><div class="screen" id="screen-whatsapp"></div></div>
-    <div class="phone email" id="phone-email"><div class="notch"></div><div class="app-bar"><div class="avatar">📧</div><div>Inbox<span class="sub cds-tag">Amazon SES</span></div></div><div class="screen" id="screen-email"><div class="email-empty">No messages yet</div></div></div>
+    <div class="phone email" id="phone-email"><div class="notch"></div><div class="app-bar"><div class="avatar">📧</div><div>Inbox<span class="sub cds-tag">Amazon SES · ~$0.0001/msg</span></div></div><div class="screen" id="screen-email"><div class="email-empty">No messages yet</div></div></div>
+    <div class="phone sms" id="phone-sms"><div class="notch"></div><div class="app-bar"><div class="avatar">💬</div><div>Messages<span class="sub cds-tag">AWS EUM · SMS · ~$0.0075/msg</span></div></div><div class="screen" id="screen-sms"></div></div>
+    <div class="phone rcs" id="phone-rcs"><div class="notch"></div><div class="app-bar"><div class="avatar">💸</div><div>Recovery Agent<span class="sub cds-tag">AWS EUM · RCS · ~$0.012/msg</span></div></div><div class="screen" id="screen-rcs"></div></div>
+    <div class="phone whatsapp" id="phone-whatsapp"><div class="notch"></div><div class="app-bar"><div class="avatar">💸</div><div>Recovery Agent<span class="sub cds-tag">AWS EUM Social · WhatsApp · ~$0.035/msg</span></div></div><div class="screen" id="screen-whatsapp"></div></div>
   </div>
 
-  <!-- Journey tracker: shows where we are and the path used -->
+  <!-- Journey tracker: the escalation ladder + the path actually taken -->
   <div class="journey" id="journey">
-    <div class="jstep" data-i="0"><span class="jdot">1</span><span class="jlabel">📱 SMS<br>Initial contact</span></div>
+    <div class="jstep" data-i="0"><span class="jdot">1</span><span class="jlabel">📧 Email<br>Day 0 · first touch</span></div>
     <div class="jsep"></div>
-    <div class="jstep" data-i="1"><span class="jdot">2</span><span class="jlabel">💬 RCS<br>Payment plan</span></div>
+    <div class="jstep" data-i="1"><span class="jdot">2</span><span class="jlabel">📱 SMS<br>Day 3 · no response</span></div>
     <div class="jsep"></div>
-    <div class="jstep" data-i="2"><span class="jdot">3</span><span class="jlabel">📲 WhatsApp<br>Hardship hold</span></div>
+    <div class="jstep" data-i="2"><span class="jdot">3</span><span class="jlabel">💬 RCS<br>Day 7 · still silent</span></div>
     <div class="jsep"></div>
-    <div class="jstep" data-i="3"><span class="jdot">4</span><span class="jlabel">📱 SMS<br>Dispute paused</span></div>
+    <div class="jstep" data-i="3"><span class="jdot">4</span><span class="jlabel">📲 WhatsApp<br>Day 10 · engages!</span></div>
     <div class="jsep"></div>
-    <div class="jstep" data-i="4"><span class="jdot">5</span><span class="jlabel">📲 WhatsApp<br>Opt-out honored</span></div>
+    <div class="jstep" data-i="4"><span class="jdot">5</span><span class="jlabel">📲 WhatsApp<br>Resolved · ladder stops</span></div>
   </div>
 
   <div class="status-strip">
     <div class="chip">Account <b>ACCT-TEL-80231</b></div>
     <div class="chip">Past due <b id="st-balance">$84.00</b></div>
     <div class="chip">Status <b id="st-status">past_due</b></div>
-    <div class="chip">Channels <b id="st-channels">0</b></div>
+    <div class="chip">Outreach spend <b id="st-spend">$0.0000</b></div>
     <div class="chip">SES receipts <b id="st-emails">0</b></div>
   </div>
   <div class="controls">
@@ -116,37 +119,53 @@
     <button class="ghost" onclick="autoPlayAll()">▶ Auto-play all</button>
   </div>
 <script>
-const state = { status: 'past_due', channels: new Set(), emails: 0 };
+const state = { status: 'past_due', spend: 0, emails: 0 };
+const COST = { email:0.0001, sms:0.0075, rcs:0.012, whatsapp:0.035 };
 const steps = [
-  { act:['ACT 1','Proactive SMS nudge'], ch:'sms', dir:'out', text:"Hi Dana, it's your telecom. Your account is past due $84.00 and service may pause Oct 16. Reply HELP and I'll make it easy to sort out." },
-  { ch:'sms', dir:'in', text:'HELP' },
-  { ch:'sms', dir:'out', tool:'check_balance', text:"Your balance is $84.00 (32 days past due). To avoid an interruption on Oct 16 you can pay in full, or I can split it into smaller payments — which is easier?" },
+  // BEAT 1 — Email first (cheapest). No response.
+  { act:['STEP 1 · Day 0','Cheapest channel first — Email'], ch:'email', dir:'out', cost:COST.email,
+    reason:'Agent decision: first touch on the cheapest, least-intrusive channel (Email, ~$0.0001).',
+    email:{ subject:'Your account is past due — we can help', body:'Hi Dana, your account has a past-due balance of <b>$84.00</b>. Reply to this email or we\'ll follow up — we can split it into smaller payments.<div class="badge">📧 Attempt 1 · Email · ~$0.0001</div>' } },
+  { ch:'email', dir:'note', text:'⏳ 3 days pass — no open, no reply.' },
 
-  { act:['ACT 2','RCS — she asks to split the balance'], ch:'rcs', dir:'in', text:"I can't pay all of it right now, can I split it?" },
-  { ch:'rcs', dir:'out', tool:'offer_payment_plan + send_receipt', status:'plan_active', email:{ subject:'Payment Plan Confirmed — ACCT-TEL-80231', body:'Your plan: 3 biweekly payments of $28.00, starting Oct 10. Total $84.00.<div class="badge">✅ Service stays on while the plan is active</div>' },
-    card:{ title:'Flexible Payment Plan', body:'Split $84.00 into 3 biweekly payments of <b>$28.00</b>, starting Oct 10. Service stays on.', actions:['✅ Accept plan','Pick different dates','Pay in full instead'] } },
+  // BEAT 2 — Escalate to SMS. No response.
+  { act:['STEP 2 · Day 3','No response → escalate to SMS'], ch:'sms', dir:'out', cost:COST.sms,
+    reason:'Agent decision: no email response in 3 days → escalate to SMS (~98% open rate, higher cost ~$0.0075).',
+    text:"Hi Dana, following up on your past-due balance of $84.00. Reply HELP and I'll make it easy — pay in full or split into smaller payments." },
+  { ch:'sms', dir:'note', text:'⏳ 4 more days — still silent.' },
 
-  { act:['ACT 3','WhatsApp — hardship disclosed, agent pivots to empathy'], ch:'whatsapp', dir:'in', text:'honestly I just lost my job, money is really tight' },
-  { ch:'whatsapp', dir:'out', tool:'apply_hardship + send_receipt', status:'hardship_hold', email:{ subject:'Hardship Hold Applied', body:'We\'ve paused collection and late fees on your account.<div class="badge">🤝 No service interruption · a specialist will follow up</div>' },
+  // BEAT 3 — Escalate to RCS rich card. No response.
+  { act:['STEP 3 · Day 7','Still silent → escalate to RCS'], ch:'rcs', dir:'out', cost:COST.rcs,
+    reason:'Agent decision: still no response → escalate to RCS rich card (tap-to-act, ~$0.012). Falls back to SMS if the device can\'t render RCS.',
+    card:{ title:'Let\'s resolve your $84.00 balance', body:'Tap an option — no call, no hold.', actions:['💳 Pay now','📅 Split into payments','🙋 I need help'] } },
+  { ch:'rcs', dir:'note', text:'⏳ 3 more days — no tap, no reply.' },
+
+  // BEAT 4 — Escalate to WhatsApp (high-value/overdue). Customer ENGAGES.
+  { act:['STEP 4 · Day 10','Severely overdue → WhatsApp (premium touch)'], ch:'whatsapp', dir:'out', cost:COST.whatsapp,
+    reason:'Agent decision: no response on cheaper channels + 32 days overdue → escalate to WhatsApp, the richest, most personal channel (~$0.035). Reserved for accounts worth the touch.',
+    text:"Hi Dana, it's your telecom. I don't want your service to pause. I'm here on WhatsApp whenever it's easiest — we can sort your $84.00 balance together, no pressure." },
+  { ch:'whatsapp', dir:'in', text:'honestly I just lost my job, money is really tight' },
+
+  // BEAT 5 — Engaged! Agent resolves with hardship. Ladder STOPS.
+  { act:['STEP 5','Customer engaged → ladder STOPS, agent resolves'], ch:'whatsapp', dir:'out', tool:'apply_hardship + send_receipt', status:'hardship_hold',
+    reason:'Customer engaged on WhatsApp → escalation STOPS. The agent now reasons and acts: detects hardship, applies a hold, suppresses fees, and confirms by email.',
+    email:{ subject:'Hardship Hold Applied — ACCT-TEL-80231', body:'We\'ve paused collection and late fees on your account.<div class="badge">🤝 No service interruption · a specialist will follow up</div>' },
     text:"I'm really sorry to hear that — thank you for telling me. I've paused everything: no late fees, no interruption. A specialist will follow up to set terms that work for you. You don't need to do anything right now." },
-
-  { act:['ACT 4','Dispute on SMS — collection paused (same thread)'], ch:'sms', dir:'in', text:"wait, there's a $20 charge I don't recognize — I'm disputing that" },
-  { ch:'sms', dir:'out', tool:'log_dispute', status:'in_dispute', text:"Got it — I've logged your dispute and paused collection on that amount while our team reviews it (3 business days). Thanks for flagging it." },
-
-  { act:['ACT 5','Compliance — opt-out honored instantly'], ch:'whatsapp', dir:'in', text:'actually please STOP texting me' },
-  { ch:'whatsapp', dir:'out', tool:'escalate_to_human (opt_out)', text:"Understood — you won't receive any further messages from me. A specialist has been notified. Take care, Dana." },
 ];
 const screens = { sms:document.getElementById('screen-sms'), rcs:document.getElementById('screen-rcs'), whatsapp:document.getElementById('screen-whatsapp'), email:document.getElementById('screen-email') };
 const LABEL = { sms:'📱 SMS', rcs:'💬 RCS', whatsapp:'📲 WhatsApp', email:'📧 EMAIL' };
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 function setActive(ch){ document.querySelectorAll('.phone').forEach(p=>p.classList.remove('active')); if(ch) document.getElementById('phone-'+ch).classList.add('active'); }
 function down(ch){ screens[ch].scrollTop = screens[ch].scrollHeight; }
-function updateStatus(){ document.getElementById('st-status').textContent = state.status; document.getElementById('st-channels').textContent = state.channels.size; document.getElementById('st-emails').textContent = state.emails; }
+function updateStatus(){ document.getElementById('st-status').textContent = state.status; document.getElementById('st-spend').textContent = '$'+state.spend.toFixed(4); document.getElementById('st-emails').textContent = state.emails; }
 async function typing(ch){ const t=document.createElement('div'); t.className='typing'; t.innerHTML='<span></span><span></span><span></span>'; screens[ch].appendChild(t); down(ch); await sleep(850); t.remove(); }
 async function render(s){
   if(s.act){ const p=document.getElementById('actPill'); p.classList.remove('show'); await sleep(200); p.innerHTML='<span class="step">'+s.act[0]+'</span>'+s.act[1]; p.classList.add('show'); await sleep(300); }
-  setActive(s.ch); state.channels.add(s.ch);
+  if(s.reason){ const r=document.createElement('div'); r.className='reason-banner'; r.textContent=s.reason; document.getElementById('reasonSlot').innerHTML=''; document.getElementById('reasonSlot').appendChild(r); }
+  setActive(s.ch);
+  if(s.dir==='note'){ const n=document.createElement('div'); n.className='silence-note'; n.textContent=s.text; screens[s.ch].appendChild(n); down(s.ch); await sleep(500); return; }
   if(s.dir==='in'){ const b=document.createElement('div'); b.className='bubble out'; b.textContent=s.text; screens[s.ch].appendChild(b); down(s.ch); updateStatus(); await sleep(500); return; }
+  if(s.cost){ state.spend += s.cost; }
   if(s.tool){ const c=document.createElement('div'); c.className='tool-chip'; c.textContent='⚙ agent → '+s.tool; screens[s.ch].appendChild(c); down(s.ch); await sleep(500); }
   await typing(s.ch);
   if(s.status) state.status=s.status;
@@ -159,7 +178,7 @@ async function render(s){
 
 // Group the flat steps into 5 BEATS — each beat = one Next click (an inbound
 // + the agent's response), so the viewer sees the journey one stage at a time.
-const beats = [[0,1,2],[3,4],[5,6],[7,8],[9,10]];
+const beats = [[0,1],[2,3],[4,5],[6,7],[8,9]];
 let beatIdx = -1;
 let animating = false;
 
@@ -192,7 +211,7 @@ async function prevStep(){
   if(animating || beatIdx<=0) return;
   const target = beatIdx-1;
   Object.values(screens).forEach(s=>{ s.innerHTML=''; }); screens.email.innerHTML='<div class="email-empty">No messages yet</div>';
-  state.status='past_due'; state.channels=new Set(); state.emails=0;
+  state.status='past_due'; state.spend=0; state.emails=0;
   beatIdx=-1; updateStatus();
   for(let i=0;i<=target;i++){ beatIdx=i; updateJourney(); await playBeat(i); }
   updateButtons();
