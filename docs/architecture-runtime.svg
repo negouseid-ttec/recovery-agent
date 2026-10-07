@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748b"/></marker>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0f766e"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+  <rect width="1000" height="760" fill="#ffffff"/>
+  <rect x="0" y="0" width="1000" height="54" fill="url(#hdr)"/>
+  <text x="24" y="35" fill="#fff" font-size="22" font-weight="bold">Recovery Agent — Runtime Architecture (AWS)</text>
+
+  <!-- lane labels -->
+  <text x="24" y="80" fill="#94a3b8" font-size="12" font-weight="bold">INBOUND  (customer replies)</text>
+  <text x="24" y="700" fill="#94a3b8" font-size="12" font-weight="bold">OUTBOUND  (agent replies on the same channel)</text>
+
+  <!-- Inbound channels row -->
+  <g font-size="13" font-weight="bold" text-anchor="middle">
+    <rect x="40"  y="90" width="200" height="46" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/><text x="140" y="112">📱 SMS</text><text x="140" y="128" font-size="10" font-weight="normal" fill="#92400e">AWS End User Messaging</text>
+    <rect x="268" y="90" width="200" height="46" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><text x="368" y="112">💬 RCS</text><text x="368" y="128" font-size="10" font-weight="normal" fill="#1e40af">AWS End User Messaging</text>
+    <rect x="496" y="90" width="200" height="46" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/><text x="596" y="112">📲 WhatsApp</text><text x="596" y="128" font-size="10" font-weight="normal" fill="#15803d">EUM Social</text>
+    <rect x="724" y="90" width="200" height="46" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.5"/><text x="824" y="112">📧 Email</text><text x="824" y="128" font-size="10" font-weight="normal" fill="#115e59">Amazon SES (inbound rule)</text>
+  </g>
+
+  <!-- API Gateway -->
+  <rect x="40" y="168" width="884" height="40" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+  <text x="482" y="193" text-anchor="middle" font-size="13" font-weight="bold">Amazon API Gateway — one webhook per channel</text>
+  <g stroke="#64748b" stroke-width="1.2">
+    <line x1="140" y1="136" x2="300" y2="168" marker-end="url(#a)"/>
+    <line x1="368" y1="136" x2="420" y2="168" marker-end="url(#a)"/>
+    <line x1="596" y1="136" x2="540" y2="168" marker-end="url(#a)"/>
+    <line x1="824" y1="136" x2="660" y2="168" marker-end="url(#a)"/>
+  </g>
+
+  <!-- Triage lambda -->
+  <rect x="250" y="236" width="464" height="56" rx="10" fill="#fdf4ff" stroke="#c026d3" stroke-width="2"/>
+  <text x="482" y="260" text-anchor="middle" font-size="14" font-weight="bold">λ  ra-message-triage</text>
+  <text x="482" y="279" text-anchor="middle" font-size="11" fill="#a21caf">Amazon Bedrock (Nova 2 Lite) — classify intent · urgency · sentiment · needsHuman</text>
+  <line x1="482" y1="208" x2="482" y2="236" stroke="#64748b" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- Orchestrator + DynamoDB -->
+  <rect x="150" y="328" width="420" height="150" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="360" y="352" text-anchor="middle" font-size="14" font-weight="bold">λ  ra-agent-orchestrator</text>
+  <text x="360" y="370" text-anchor="middle" font-size="11" fill="#4338ca">Amazon Bedrock (Nova 2 Lite) · Converse + Tool Use</text>
+  <line x1="170" y1="380" x2="550" y2="380" stroke="#c7d2fe"/>
+  <text x="170" y="400" font-size="11">• check_balance   • offer_payment_plan</text>
+  <text x="170" y="418" font-size="11">• record_promise_to_pay   • apply_hardship</text>
+  <text x="170" y="436" font-size="11">• log_dispute   • send_receipt   • escalate_to_human</text>
+  <text x="170" y="462" font-size="10" fill="#4338ca" font-style="italic">compliance: no threats · honors opt-out · hardship-first · quiet hours</text>
+  <line x1="482" y1="292" x2="400" y2="328" stroke="#c026d3" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="620" y="340" width="300" height="126" rx="10" fill="#ecfeff" stroke="#0891b2" stroke-width="2"/>
+  <text x="770" y="364" text-anchor="middle" font-size="14" font-weight="bold">🗄️ Amazon DynamoDB</text>
+  <text x="636" y="392" font-size="11">• ra-accounts — the past-due book</text>
+  <text x="636" y="412" font-size="11">• ra-plans / promises / disputes</text>
+  <text x="636" y="432" font-size="11">• ra-conversations</text>
+  <text x="636" y="454" font-size="10" fill="#0e7490" font-style="italic">one thread per customer, every channel</text>
+  <line x1="570" y1="392" x2="620" y2="392" stroke="#0891b2" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="620" y1="418" x2="570" y2="418" stroke="#0891b2" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- Proactive outreach -->
+  <rect x="620" y="236" width="304" height="56" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="772" y="258" text-anchor="middle" font-size="12" font-weight="bold">λ  ra-proactive-outreach  ·  EventBridge (daily)</text>
+  <text x="772" y="277" text-anchor="middle" font-size="10" fill="#9a3412">runs the escalation ladder — see decision-flow diagram</text>
+  <line x1="772" y1="292" x2="620" y2="360" stroke="#ea580c" stroke-width="1.3" stroke-dasharray="4" marker-end="url(#a)"/>
+
+  <!-- Channel sender -->
+  <rect x="150" y="520" width="420" height="52" rx="10" fill="#e2e8f0" stroke="#475569" stroke-width="2"/>
+  <text x="360" y="543" text-anchor="middle" font-size="14" font-weight="bold">λ  ra-channel-sender</text>
+  <text x="360" y="561" text-anchor="middle" font-size="11" fill="#475569">EUM SMS/RCS · EUM Social WhatsApp · SES — replies on the chosen channel</text>
+  <line x1="360" y1="478" x2="360" y2="520" stroke="#64748b" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- Outbound channels -->
+  <g font-size="13" font-weight="bold" text-anchor="middle">
+    <rect x="40"  y="624" width="200" height="44" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/><text x="140" y="651">📱 SMS (EUM)</text>
+    <rect x="268" y="624" width="200" height="44" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><text x="368" y="651">💬 RCS (EUM)</text>
+    <rect x="496" y="624" width="200" height="44" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/><text x="596" y="651">📲 WhatsApp</text>
+    <rect x="724" y="624" width="200" height="44" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.5"/><text x="824" y="651">📧 SES</text>
+  </g>
+  <g stroke="#64748b" stroke-width="1.2">
+    <line x1="300" y1="572" x2="150" y2="624" marker-end="url(#a)"/>
+    <line x1="360" y1="572" x2="360" y2="624" marker-end="url(#a)"/>
+    <line x1="430" y1="572" x2="580" y2="624" marker-end="url(#a)"/>
+    <line x1="500" y1="572" x2="800" y2="624" marker-end="url(#a)"/>
+  </g>
+
+  <text x="500" y="730" text-anchor="middle" font-size="11" fill="#94a3b8">4 Lambdas (ARM64) · 4 AWS CDS services · AWS CDK, fully reproducible via `cdk deploy --all` · live-verified end-to-end</text>
+</svg>

@@ -50,8 +50,13 @@ It reaches customers where they respond, offers real options with real numbers, 
 | **Cross-channel memory** | One DynamoDB thread per customer — pick up on WhatsApp exactly where the SMS left off |
 
 ## Architecture
+**Runtime architecture** — inbound channels → API Gateway → Nova triage → agent orchestrator ⇄ DynamoDB → channel sender → outbound channels:
 
-![Architecture](docs/architecture.png)
+![Runtime architecture](docs/architecture-runtime.png)
+
+**Escalation-ladder decision flow** — the "why" behind four channels: cheapest first, escalate only on silence, stop on engagement:
+
+![Escalation-ladder decision flow](docs/architecture-decision-flow.png)
 
 | Service | Role |
 |---|---|
@@ -112,7 +117,7 @@ The four-phone demo UI (`demo/web/index.html`) animates the full journey for the
 | # | Artifact | Location |
 |---|---|---|
 | 1 | Code Repository | This repo |
-| 2 | Architecture Diagram | `docs/architecture.png` |
+| 2 | Architecture Diagram | `docs/architecture-runtime.png` + `docs/architecture-decision-flow.png` |
 | 3 | Text Description | This README |
 | 4 | Demo Video | [YouTube](https://youtu.be/PLACEHOLDER) |
 | 5 | Deployed Project | CloudFront demo UI + deployed Lambdas (see Live Deployment Evidence) |
