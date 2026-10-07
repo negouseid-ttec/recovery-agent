@@ -6,6 +6,10 @@
 [![Powered by Amazon Bedrock](https://img.shields.io/badge/Amazon%20Bedrock-Nova%202%20Lite-blue)](https://aws.amazon.com/bedrock/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+![Recovery Agent demo — the omnichannel escalation ladder](demo/recovery-agent-demo.gif)
+
+> **The escalation ladder in one view:** the agent reaches the customer on the cheapest channel first (📧 Email → 📱 SMS → 💬 RCS → 📲 WhatsApp), escalates only when there's no response, and **stops the moment the customer engages** — then reasons and acts (hardship hold, dispute pause, opt-out). Total outreach spend: ~5¢.
+
 ## The Business Problem
 
 Telecom is a massive, under-served collections category — and the tools used to collect are failing:
