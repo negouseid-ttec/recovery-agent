@@ -1,122 +1,129 @@
 # Recovery Agent — Demo Video Script (~3 minutes)
 
-> Record the web UI at `http://127.0.0.1:8778/` (click **Play the recovery**),
-> then cut to a short live-proof segment (inbox + CloudWatch). Lead with the
-> dollar problem; let the architecture be the proof, not the pitch.
+> Record the step-by-step UI (click **Step 1 → narrate → Step 2 → …**), then cut
+> to the live-proof segment. The hero idea is the **escalation ladder**: the
+> agent reaches the customer on the *cheapest channel that works* and only
+> escalates when there's no response — then stops the instant they engage.
 
 ---
 
-## OPENING — the dollar problem (0:00 – 0:25)
+## OPENING — the dollar problem (0:00 – 0:22)
 
-**[SCREEN: UI initial state — four phones, status strip "Past due $84.00 · past_due"]**
+**[SCREEN: UI initial state — four phones in cost order, "Outreach spend $0.0000"]**
 
-> Telecom carriers carry billions in past-due receivables. The tools they use
-> to collect are failing: automated robocalls recover about three percent and
-> get ignored. Live agents recover around twenty percent — but cost four to
-> eight dollars per attempt, and aggressive collection drives customers to churn.
+> Telecom carriers carry billions in past-due receivables. Robocalls recover
+> about three percent. Live agents recover twenty — but cost four to eight
+> dollars a call and drive customers to churn.
 >
-> **Recovery Agent** collects the way a great human agent would — on every
-> channel, instantly, at near-zero marginal cost — and it knows when to stop.
+> **Recovery Agent** collects differently. It reaches each customer on the
+> cheapest channel that can work, escalates only when there's no response, and
+> stops the moment they engage. Watch the "outreach spend" counter — this whole
+> recovery costs about a nickel.
+
+**[ACTION: click Step 1]**
+
+---
+
+## STEP 1 — Email first, because it's nearly free (0:22 – 0:45)
+
+**[SCREEN: reason banner + Email phone]**
+
+> Day zero. The agent's first touch is **email**, through **Amazon SES** —
+> about one-hundredth of a cent. Read the reason banner: *"cheapest,
+> least-intrusive channel first."* It's a real decision, not a blast.
 >
-> Meet Dana. She's thirty-two days past due, eighty-four dollars, service
-> suspends in ten days.
+> Three days pass. No open, no reply.
 
-**[ACTION: Click "Play the recovery"]**
-
----
-
-## ACT 1 — Proactive SMS (0:25 – 0:45)
-
-**[SCREEN: SMS phone]**
-
-> The agent reaches out by **SMS**, through **AWS End User Messaging** — not a
-> robocall, a real conversation opener. Dana replies HELP. The agent calls its
-> **check_balance** tool, pulls her account from DynamoDB, and lays out the
-> options with real numbers: pay in full, or split it.
+**[ACTION: click Step 2]**
 
 ---
 
-## ACT 2 — RCS payment plan (0:45 – 1:10)
+## STEP 2 — Escalate to SMS (0:45 – 1:08)
 
-**[SCREEN: RCS phone — the rich card]**
+**[SCREEN: reason banner + SMS phone]**
 
-> Dana switches to **RCS** — richer AWS End User Messaging — and says she can't
-> pay it all. The agent calls **offer_payment_plan**, splits eighty-four dollars
-> into three biweekly payments of twenty-eight, and sends a written confirmation
-> by **Amazon SES**. Watch the email phone light up. Her service stays on.
-> That's revenue recovered that a robocall would have lost.
-
----
-
-## ACT 3 — Hardship, handled with judgment (1:10 – 1:45)
-
-**[SCREEN: WhatsApp phone]**
-
-> Now the moment that separates an agent from a dialer. Dana opens **WhatsApp**
-> — **AWS End User Messaging Social** — and says she just lost her job.
+> Silence triggers the ladder. The agent escalates to **SMS** via **AWS End
+> User Messaging** — ninety-eight percent open rate, but pricier at about
+> three-quarters of a cent. Notice it didn't send SMS *and* email at once — it
+> escalated *because* email got no response.
 >
-> The agent doesn't push. It calls **apply_hardship**: pauses collection,
-> suppresses late fees, stops the suspension, and routes to a specialist — then
-> sends a second SES confirmation. This is compliance and empathy encoded as
-> behavior. It protects the customer relationship *and* the carrier.
+> Four more days. Still nothing.
+
+**[ACTION: click Step 3]**
 
 ---
 
-## ACT 4 — Dispute, same thread (1:45 – 2:05)
+## STEP 3 — Escalate to RCS (1:08 – 1:30)
 
-**[SCREEN: SMS phone]**
+**[SCREEN: reason banner + RCS rich card]**
 
-> Days later, back on **SMS**, Dana spots a charge she doesn't recognize and
-> disputes it. Same conversation, any channel — the agent calls **log_dispute**,
-> pauses collection on that amount, and opens a review. One continuous thread,
-> stored in DynamoDB, that picks up wherever she left off.
+> Next rung: **RCS**, also AWS End User Messaging — a rich card with tap-to-pay
+> buttons, no call, no hold. And if the handset can't render RCS, the agent
+> falls back to SMS automatically. Still a little pricier, still the right next
+> step given the silence.
 
----
-
-## ACT 5 — Compliance: opt-out (2:05 – 2:20)
-
-**[SCREEN: WhatsApp phone]**
-
-> And when she says STOP, the agent stops — instantly. **escalate_to_human**
-> with an opt-out reason, no further messages, specialist notified. Honoring
-> that in real time isn't just polite — it's a regulatory requirement, enforced
-> in code.
+**[ACTION: click Step 4]**
 
 ---
 
-## ACT 6 — Live proof (2:20 – 2:50)
+## STEP 4 — Escalate to WhatsApp, and she engages (1:30 – 1:58)
 
-**[SCREEN: cut to the real inbox + a terminal with the triage output]**
+**[SCREEN: reason banner + WhatsApp phone]**
 
-> None of this is a mockup. It's deployed on AWS right now.
+> Day ten. Thirty-plus days overdue, no response anywhere. Now — and only now —
+> the agent escalates to **WhatsApp**, via **AWS End User Messaging Social**.
+> It's the richest, most personal channel and the most expensive, so it's
+> reserved for accounts worth the touch. Read the reason: *"no response on
+> cheaper channels, severely overdue — escalate to WhatsApp."*
 >
-> **[SHOW: triage JSON]** When Dana's hardship message actually hits the
-> **deployed** triage Lambda, Amazon Bedrock — Nova 2 Lite — classifies it:
-> *intent hardship, sentiment distressed.* **[SHOW: CloudWatch]** The deployed
-> orchestrator then calls check_balance, decides on apply_hardship on its own,
-> and fires a real email through Amazon SES — **[SHOW: the inbox]** — this one.
-> Inbound message, classified by AI, reasoned over, answered on the right
-> channel, through live Lambdas in one unbroken chain.
+> And this time, Dana replies: *"I just lost my job, money is really tight."*
+
+**[ACTION: click Step 5]**
 
 ---
 
-## CLOSING — the business case (2:50 – 3:05)
+## STEP 5 — The ladder STOPS; the agent reasons and acts (1:58 – 2:25)
+
+**[SCREEN: WhatsApp — tool chips fire]**
+
+> The instant she engages, escalation stops — no more channels, no more cost.
+> Now the agent does the hard part. It doesn't push. It detects hardship, calls
+> **apply_hardship** — pausing collection, suppressing late fees, stopping the
+> suspension — and sends a written confirmation by **Amazon SES**.
+>
+> Total outreach spend for this entire recovery: about five cents. A live-agent
+> campaign would have cost dollars and might have lost her to churn.
+
+---
+
+## STEP 6 — Live proof (2:25 – 2:52)
+
+**[SCREEN: cut to terminal running demo/live/live-proof.sh + the real inbox]**
+
+> And this is all running on AWS right now. When Dana's hardship message hits
+> the **deployed** triage Lambda, Amazon Bedrock — Nova 2 Lite — classifies it:
+> *hardship, distressed.* The deployed orchestrator then decides on its own —
+> check_balance, apply_hardship, and it even composes a full, empathetic
+> hardship email — and fires it through **Amazon SES**. There's the message in
+> the inbox. Inbound to resolution, one unbroken chain, live Lambdas.
+
+---
+
+## CLOSING — the business case (2:52 – 3:05)
 
 **[SCREEN: architecture diagram with the Business Impact box]**
 
-> On a ten-million-dollar past-due book, lifting recovery from twenty to thirty
-> percent recovers an extra **one million dollars** — while cutting live-agent
-> minutes by seventy percent.
->
-> Four AWS Communication Developer Services, one Bedrock agent, fully
-> reproducible in CDK, and ready to list on AWS Marketplace. Recovery Agent —
-> revenue recovery that customers don't hang up on. Thank you.
+> Recovery Agent: four AWS Communication Developer Services, one Bedrock agent,
+> an intelligent escalation ladder that collects for cents, and compliance built
+> in. On a ten-million-dollar book, lifting recovery from twenty to thirty
+> percent is a **million dollars** recovered — at a fraction of the cost to
+> collect. Reproducible in CDK, ready for AWS Marketplace. Thank you.
 
 ---
 
 ## Recording Notes
-- Resolution 1400×900 or 1080p. 30fps is fine.
-- The UI's status strip (Past due → status, SES receipts) visibly tracks progress — keep it in frame.
-- For ACT 6, re-run `aws lambda invoke --function-name ra-message-triage ...` on camera and show the real inbox email.
-- Record VO separately for clean audio; total target 2:55–3:05.
-- No copyrighted music.
+- Step through the UI one click per narration beat — the reason banner + the
+  "outreach spend" chip are the stars; keep them in frame.
+- For Step 6, re-run `demo/live/seed-live.sh` then `demo/live/live-proof.sh` on
+  camera and show the real inbox email.
+- Under 3:00. 1080p. Clean VO recorded separately. No copyrighted music.
