@@ -8,27 +8,30 @@
 
 ## The Business Problem
 
-Telecom carriers carry **billions in past-due accounts receivable**. The tools they use to collect are failing:
+Telecom is a massive, under-served collections category — and the tools used to collect are failing:
 
-- **Automated robocalls** recover ~**3%** and customers ignore them.
-- **Live agents** recover ~**20%** but cost **$4–8 per contact attempt** — most of which reach voicemail.
-- Aggressive collection **drives churn**: a mishandled past-due customer cancels and never comes back, destroying lifetime value far larger than the balance.
+- **Telecom is more than a fifth of all U.S. debt-collection revenue**, and one of the most common tradelines in consumers' credit files. *(CFPB, 2018)*
+- The ARM (collections) industry recovers only **~11% of face value** — most past-due money is never recovered. *(ACA International)*
+- **Live-agent contact is expensive:** the industry median is **~$13.50 per agent-assisted contact** vs **~$1.84 for self-service** *(Gartner)*; collections calls commonly run **$5–$25 each**, most reaching voicemail.
+- Aggressive collection **drives churn** — a mishandled past-due customer cancels and never comes back, destroying lifetime value far larger than the balance.
+- It's also **heavily regulated** (FDCPA / Regulation F): quiet-hours limits (no contact before 8am / after 9pm), mandatory opt-out, no harassment — and debt collection is consistently among the most-complained-about financial topics to the CFPB.
 
-The result: carriers either leave money on the table or spend heavily to recover it while burning customer relationships.
+The result: carriers leave money on the table *or* spend heavily to recover it while burning relationships and risking compliance violations.
 
 ## The Solution — and the ROI
 
-**Recovery Agent** is an AI that collects the way a great human agent would — but on every channel, instantly, 24/7, and at near-zero marginal cost.
+**Recovery Agent** collects the way a great human agent would — on every channel, instantly, 24/7, at near-zero marginal cost — via an **intelligent escalation ladder**: start on the cheapest channel that can work, escalate only on silence, and stop the instant the customer engages.
 
-> **On a $10M past-due book, lifting recovery from 20% to 30% recovers an additional $1,000,000 — while cutting live-agent contact minutes by ~70%.**
+> **Mature AI collections cut cost-to-collect by 25–35%** *(Deloitte, 2025)*. In this demo, the agent reaches and resolves an account for **~$0.05** across four channels — against **$5–$25** for a single live-agent call attempt (a 100×+ per-contact advantage). On a **$10M** past-due book, a 25–35% lower cost-to-collect plus a modest recovery lift is a **seven-figure swing**.
 
-It reaches customers where they respond, offers real options with real numbers, and — critically — **knows when to stop**: it leads with empathy on hardship, pauses on disputes, and honors opt-outs instantly. That protects the customer relationship *and* keeps the carrier compliant.
+It reaches customers where they respond, offers real options with real numbers, and — critically — **knows when to stop**: it leads with empathy on hardship, pauses on disputes, honors opt-outs instantly, and respects quiet hours. That protects the relationship *and* keeps the carrier compliant.
 
 ```
-📱 SMS         → "Your account is past due $84. Reply HELP and I'll make it easy."
-💬 RCS         → tap: Pay now · Split into payments · Dispute · I need help
-📲 WhatsApp    → negotiates a plan, handles hardship, collects documents
-📧 SES email   → the written confirmation / compliance paper trail
+📧 SES email   → Day 0 · cheapest first touch (~$0.0001/msg)
+📱 SMS         → Day 3 · escalate on silence (~$0.0075/msg)
+💬 RCS         → Day 7 · rich tap-to-pay card (~$0.012/msg; RCS→SMS fallback)
+📲 WhatsApp    → Day 10 · premium touch for high-value/overdue (~$0.035/msg)
+→ ladder STOPS the moment the customer engages on any channel
 ```
 
 ### What makes it agentic (not a robo-dialer)
@@ -110,6 +113,18 @@ The four-phone demo UI (`demo/web/index.html`) animates the full journey for the
 | 4 | Demo Video | [YouTube](https://youtu.be/PLACEHOLDER) |
 | 5 | Deployed Project | CloudFront demo UI + deployed Lambdas (see Live Deployment Evidence) |
 | 6 | ACE Opportunity ID | `OPP-XXXXXXXXX` |
+
+## Sources
+
+Market and ROI figures above are drawn from public sources:
+- CFPB, *Quarterly Consumer Credit Trends: Collection of Telecommunications Debt* (2018) — telecom = >1/5 of collection revenue
+- ACA International — ARM industry recovery rate (~11% of face value)
+- Gartner — cost per contact (~$1.84 self-service vs ~$13.50 agent-assisted)
+- Deloitte (2025) — mature AI collections cut cost-to-collect 25–35%
+- Fact.MR, *Debt Collection Services Market* (2025) — market size
+- CFPB *FDCPA Annual Reports* (2023, 2025); *Regulation F* (12 CFR Part 1006) — compliance rules
+
+See [demo/RESEARCH_BRIEF.md](demo/RESEARCH_BRIEF.md) for the full brief with per-claim confidence notes.
 
 ## License
 

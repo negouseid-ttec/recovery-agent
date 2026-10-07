@@ -11,9 +11,10 @@
 
 **[SCREEN: UI initial state — four phones in cost order, "Outreach spend $0.0000"]**
 
-> Telecom carriers carry billions in past-due receivables. Robocalls recover
-> about three percent. Live agents recover twenty — but cost four to eight
-> dollars a call and drive customers to churn.
+> Telecommunications is more than a fifth of all U.S. debt-collection revenue —
+> and the industry recovers only about eleven cents on the dollar. Most past-due
+> money is simply left on the table. Robocalls get ignored; live-agent calls
+> cost five to twenty-five dollars each and push customers to churn.
 >
 > **Recovery Agent** collects differently. It reaches each customer on the
 > cheapest channel that can work, escalates only when there's no response, and
@@ -91,8 +92,9 @@
 > **apply_hardship** — pausing collection, suppressing late fees, stopping the
 > suspension — and sends a written confirmation by **Amazon SES**.
 >
-> Total outreach spend for this entire recovery: about five cents. A live-agent
-> campaign would have cost dollars and might have lost her to churn.
+> Total outreach spend for this entire recovery: about five cents. The industry
+> median for a single agent-assisted contact is over thirteen dollars — and most
+> calls never reach the customer.
 
 ---
 
@@ -115,9 +117,10 @@
 
 > Recovery Agent: four AWS Communication Developer Services, one Bedrock agent,
 > an intelligent escalation ladder that collects for cents, and compliance built
-> in. On a ten-million-dollar book, lifting recovery from twenty to thirty
-> percent is a **million dollars** recovered — at a fraction of the cost to
-> collect. Reproducible in CDK, ready for AWS Marketplace. Thank you.
+> in. Industry benchmarks put mature AI collections at twenty-five to thirty-five
+> percent lower cost-to-collect — so on a ten-million-dollar book, with the
+> recovery lift on top, that's a seven-figure swing. Reproducible in CDK, ready
+> for AWS Marketplace. Thank you.
 
 ---
 
