@@ -63,6 +63,17 @@
   .status-strip { max-width:860px; margin:16px auto 0; display:flex; gap:16px; justify-content:center; font-size:12px; color:var(--muted); flex-wrap:wrap; }
   .status-strip .chip { background:var(--panel); border:1px solid #334155; border-radius:8px; padding:6px 12px; } .status-strip b { color:var(--ink); }
   .cds-tag { font-size:10px; opacity:.7; }
+  .journey { max-width:900px; margin:16px auto 4px; display:flex; align-items:flex-start; justify-content:center; gap:4px; }
+  .jstep { display:flex; flex-direction:column; align-items:center; gap:6px; width:120px; opacity:.4; transition:opacity .3s,transform .3s; }
+  .jstep.active { opacity:1; transform:scale(1.06); }
+  .jstep.done { opacity:.85; }
+  .jdot { width:30px; height:30px; border-radius:50%; background:#1e293b; border:2px solid #334155; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:var(--muted); }
+  .jstep.active .jdot { background:linear-gradient(135deg,#0f766e,#2563eb); border-color:#2dd4bf; color:#fff; }
+  .jstep.done .jdot { background:#0f766e; border-color:#0f766e; color:#fff; }
+  .jstep.done .jdot::after { content:'✓'; }
+  .jstep.done .jdot { font-size:0; } .jstep.done .jdot::after { font-size:15px; }
+  .jlabel { font-size:11px; color:var(--ink); text-align:center; line-height:1.3; }
+  .jsep { flex:1; max-width:40px; height:2px; background:#334155; margin-top:14px; }
 </style>
 </head>
 <body>
@@ -77,6 +88,20 @@
     <div class="phone whatsapp" id="phone-whatsapp"><div class="notch"></div><div class="app-bar"><div class="avatar">💸</div><div>Recovery Agent<span class="sub cds-tag">AWS EUM Social · WhatsApp</span></div></div><div class="screen" id="screen-whatsapp"></div></div>
     <div class="phone email" id="phone-email"><div class="notch"></div><div class="app-bar"><div class="avatar">📧</div><div>Inbox<span class="sub cds-tag">Amazon SES</span></div></div><div class="screen" id="screen-email"><div class="email-empty">No messages yet</div></div></div>
   </div>
+
+  <!-- Journey tracker: shows where we are and the path used -->
+  <div class="journey" id="journey">
+    <div class="jstep" data-i="0"><span class="jdot">1</span><span class="jlabel">📱 SMS<br>Initial contact</span></div>
+    <div class="jsep"></div>
+    <div class="jstep" data-i="1"><span class="jdot">2</span><span class="jlabel">💬 RCS<br>Payment plan</span></div>
+    <div class="jsep"></div>
+    <div class="jstep" data-i="2"><span class="jdot">3</span><span class="jlabel">📲 WhatsApp<br>Hardship hold</span></div>
+    <div class="jsep"></div>
+    <div class="jstep" data-i="3"><span class="jdot">4</span><span class="jlabel">📱 SMS<br>Dispute paused</span></div>
+    <div class="jsep"></div>
+    <div class="jstep" data-i="4"><span class="jdot">5</span><span class="jlabel">📲 WhatsApp<br>Opt-out honored</span></div>
+  </div>
+
   <div class="status-strip">
     <div class="chip">Account <b>ACCT-TEL-80231</b></div>
     <div class="chip">Past due <b id="st-balance">$84.00</b></div>
@@ -85,8 +110,10 @@
     <div class="chip">SES receipts <b id="st-emails">0</b></div>
   </div>
   <div class="controls">
-    <button id="playBtn" onclick="play()">▶ Play the recovery</button>
+    <button class="ghost" id="prevBtn" onclick="prevStep()" disabled>‹ Back</button>
+    <button id="nextBtn" onclick="nextStep()">Step 1 of 5 — Start ›</button>
     <button class="ghost" onclick="location.reload()">↻ Reset</button>
+    <button class="ghost" onclick="autoPlayAll()">▶ Auto-play all</button>
   </div>
 <script>
 const state = { status: 'past_due', channels: new Set(), emails: 0 };
@@ -117,21 +144,65 @@ function down(ch){ screens[ch].scrollTop = screens[ch].scrollHeight; }
 function updateStatus(){ document.getElementById('st-status').textContent = state.status; document.getElementById('st-channels').textContent = state.channels.size; document.getElementById('st-emails').textContent = state.emails; }
 async function typing(ch){ const t=document.createElement('div'); t.className='typing'; t.innerHTML='<span></span><span></span><span></span>'; screens[ch].appendChild(t); down(ch); await sleep(850); t.remove(); }
 async function render(s){
-  if(s.act){ const p=document.getElementById('actPill'); p.classList.remove('show'); await sleep(200); p.innerHTML='<span class="step">'+s.act[0]+'</span>'+s.act[1]; p.classList.add('show'); await sleep(450); }
+  if(s.act){ const p=document.getElementById('actPill'); p.classList.remove('show'); await sleep(200); p.innerHTML='<span class="step">'+s.act[0]+'</span>'+s.act[1]; p.classList.add('show'); await sleep(300); }
   setActive(s.ch); state.channels.add(s.ch);
-  if(s.dir==='in'){ const b=document.createElement('div'); b.className='bubble out'; b.textContent=s.text; screens[s.ch].appendChild(b); down(s.ch); updateStatus(); await sleep(650); return; }
-  if(s.tool){ const c=document.createElement('div'); c.className='tool-chip'; c.textContent='⚙ agent → '+s.tool; screens[s.ch].appendChild(c); down(s.ch); await sleep(550); }
+  if(s.dir==='in'){ const b=document.createElement('div'); b.className='bubble out'; b.textContent=s.text; screens[s.ch].appendChild(b); down(s.ch); updateStatus(); await sleep(500); return; }
+  if(s.tool){ const c=document.createElement('div'); c.className='tool-chip'; c.textContent='⚙ agent → '+s.tool; screens[s.ch].appendChild(c); down(s.ch); await sleep(500); }
   await typing(s.ch);
   if(s.status) state.status=s.status;
   if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML='<div class="rc-head"><div class="t">'+s.card.title+'</div></div><div class="rc-body">'+s.card.body+'</div><div class="rc-actions">'+s.card.actions.map(a=>'<span class="chip">'+a+'</span>').join('')+'</div>'; screens[s.ch].appendChild(c); }
   else if(s.text){ const b=document.createElement('div'); b.className='bubble in'; b.innerHTML='<span class="who">🤖 Recovery Agent</span>'+s.text; screens[s.ch].appendChild(b); }
   down(s.ch);
   if(s.email){ state.emails++; const e=screens.email.querySelector('.email-empty'); if(e) e.remove(); const m=document.createElement('div'); m.className='email-msg'; m.innerHTML='<div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div><div class="email-subject">'+s.email.subject+'</div><div class="email-body">'+s.email.body+'</div>'; screens.email.appendChild(m); document.getElementById('phone-email').classList.add('active'); await sleep(300); document.getElementById('phone-email').classList.remove('active'); setActive(s.ch); }
-  updateStatus(); await sleep(850);
+  updateStatus(); await sleep(300);
 }
-async function play(){ const b=document.getElementById('playBtn'); b.disabled=true; b.textContent='▶ Playing…'; for(const s of steps) await render(s); setActive(null); const p=document.getElementById('actPill'); p.innerHTML='✅ Balance resolved · hardship held · dispute paused · opt-out honored'; b.textContent='✓ Done — Reset to replay'; }
-updateStatus();
-if(new URLSearchParams(location.search).get('autoplay')==='1'){ window.addEventListener('load',()=>setTimeout(play,400)); }
+
+// Group the flat steps into 5 BEATS — each beat = one Next click (an inbound
+// + the agent's response), so the viewer sees the journey one stage at a time.
+const beats = [[0,1,2],[3,4],[5,6],[7,8],[9,10]];
+let beatIdx = -1;
+let animating = false;
+
+function updateJourney(){
+  document.querySelectorAll('.jstep').forEach((el)=>{
+    const i = +el.dataset.i;
+    el.classList.toggle('active', i===beatIdx);
+    el.classList.toggle('done', i<beatIdx);
+  });
+}
+function updateButtons(){
+  const next=document.getElementById('nextBtn'), prev=document.getElementById('prevBtn');
+  prev.disabled = beatIdx<=0;
+  if(beatIdx>=beats.length-1){ next.disabled=true; next.textContent='✓ Recovery complete'; }
+  else { next.disabled=false; next.textContent = beatIdx<0 ? 'Step 1 of 5 — Start ›' : `Step ${beatIdx+2} of 5 ›`; }
+}
+async function playBeat(i){
+  for(const sx of beats[i]) await render(steps[sx]);
+}
+async function nextStep(){
+  if(animating || beatIdx>=beats.length-1) return;
+  animating=true; beatIdx++;
+  updateJourney();
+  await playBeat(beatIdx);
+  if(beatIdx===beats.length-1){ const p=document.getElementById('actPill'); setActive(null); p.innerHTML='✅ Balance resolved · hardship held · dispute paused · opt-out honored'; }
+  animating=false; updateButtons();
+}
+// Back = rebuild from scratch up to the previous beat (keeps state honest)
+async function prevStep(){
+  if(animating || beatIdx<=0) return;
+  const target = beatIdx-1;
+  Object.values(screens).forEach(s=>{ s.innerHTML=''; }); screens.email.innerHTML='<div class="email-empty">No messages yet</div>';
+  state.status='past_due'; state.channels=new Set(); state.emails=0;
+  beatIdx=-1; updateStatus();
+  for(let i=0;i<=target;i++){ beatIdx=i; updateJourney(); await playBeat(i); }
+  updateButtons();
+}
+async function autoPlayAll(){
+  if(animating) return;
+  while(beatIdx<beats.length-1){ await nextStep(); await sleep(500); }
+}
+updateStatus(); updateJourney(); updateButtons();
+if(new URLSearchParams(location.search).get('autoplay')==='1'){ window.addEventListener('load',()=>setTimeout(autoPlayAll,400)); }
 </script>
 </body>
 </html>
