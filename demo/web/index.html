@@ -222,6 +222,39 @@ async function autoPlayAll(){
 }
 updateStatus(); updateJourney(); updateButtons();
 if(new URLSearchParams(location.search).get('autoplay')==='1'){ window.addEventListener('load',()=>setTimeout(autoPlayAll,400)); }
+// Deterministic frame capture: ?step=N renders beats 0..N instantly (no typing
+// delays) so a headless browser can screenshot each stage for a GIF.
+(function(){
+  const q = new URLSearchParams(location.search);
+  const target = q.get('step');
+  if(target===null) return;
+  const N = Math.max(0, Math.min(beats.length-1, parseInt(target,10)));
+  window.addEventListener('load', async ()=>{
+    const st=document.createElement('style'); st.textContent='*{animation:none !important;transition:none !important;opacity:1 !important}'; document.head.appendChild(st);
+    // Render instantly by stubbing the sleep delays.
+    const realSleep = window.__sleep; // not used; we just advance beats fast
+    for(let i=0;i<=N;i++){ beatIdx=i; updateJourney(); for(const sx of beats[i]){ await renderInstant(steps[sx]); } }
+    updateButtons();
+    if(beatIdx===beats.length-1){ const p=document.getElementById('actPill'); setActive(null); p.innerHTML='✅ Balance resolved · hardship held · ladder stopped on engagement'; }
+    document.title = 'READY';
+  });
+  // Instant (no-delay) version of render for capture.
+  window.renderInstant = async function(s){
+    if(s.act){ const p=document.getElementById('actPill'); p.innerHTML='<span class="step">'+s.act[0]+'</span>'+s.act[1]; p.classList.add('show'); }
+    if(s.reason){ const r=document.createElement('div'); r.className='reason-banner'; r.textContent=s.reason; const slot=document.getElementById('reasonSlot'); slot.innerHTML=''; slot.appendChild(r); }
+    setActive(s.ch);
+    if(s.dir==='note'){ const n=document.createElement('div'); n.className='silence-note'; n.textContent=s.text; screens[s.ch].appendChild(n); down(s.ch); return; }
+    if(s.dir==='in'){ const b=document.createElement('div'); b.className='bubble out'; b.textContent=s.text; screens[s.ch].appendChild(b); down(s.ch); updateStatus(); return; }
+    if(s.cost){ state.spend += s.cost; }
+    if(s.tool){ const c=document.createElement('div'); c.className='tool-chip'; c.textContent='⚙ agent → '+s.tool; screens[s.ch].appendChild(c); }
+    if(s.status) state.status=s.status;
+    if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML='<div class="rc-head"><div class="t">'+s.card.title+'</div></div><div class="rc-body">'+s.card.body+'</div><div class="rc-actions">'+s.card.actions.map(a=>'<span class="chip">'+a+'</span>').join('')+'</div>'; screens[s.ch].appendChild(c); }
+    else if(s.text){ const b=document.createElement('div'); b.className='bubble in'; b.innerHTML='<span class="who">🤖 Recovery Agent</span>'+s.text; screens[s.ch].appendChild(b); }
+    down(s.ch);
+    if(s.email){ state.emails++; const e=screens.email.querySelector('.email-empty'); if(e) e.remove(); const m=document.createElement('div'); m.className='email-msg'; m.innerHTML='<div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div><div class="email-subject">'+s.email.subject+'</div><div class="email-body">'+s.email.body+'</div>'; screens.email.appendChild(m); }
+    updateStatus();
+  };
+})();
 </script>
 </body>
 </html>
