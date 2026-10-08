@@ -38,12 +38,20 @@
   .sms .bubble.out { background:var(--sms); } .rcs .bubble.out { background:var(--rcs); } .whatsapp .bubble.out { background:#005c4b; } .whatsapp .bubble.in { background:#1f2c33; }
   .bubble .who { font-size:10px; font-weight:700; opacity:.7; margin-bottom:2px; display:block; }
   .tool-chip { align-self:center; font-size:10px; color:var(--muted); background:rgba(148,163,184,.12); border:1px solid #334155; border-radius:999px; padding:3px 10px; font-family:monospace; }
-  .rich-card { align-self:flex-start; max-width:90%; background:#fff; color:#0f172a; border-radius:14px; overflow:hidden; animation:pop .3s ease; box-shadow:0 4px 14px rgba(0,0,0,.3); }
-  .rich-card .rc-head { background:linear-gradient(135deg,#2563eb,#1e40af); color:#fff; padding:12px 14px; }
+  .rich-card { align-self:flex-start; max-width:92%; background:#fff; color:#0f172a; border-radius:14px; overflow:hidden; animation:pop .3s ease; box-shadow:0 4px 14px rgba(0,0,0,.3); }
+  .rich-card .rc-sender { display:flex; align-items:center; gap:6px; padding:8px 12px 0; font-size:11px; color:#1e40af; font-weight:700; }
+  .rich-card .rc-verified { display:inline-flex; align-items:center; gap:3px; background:#dbeafe; color:#1e40af; border-radius:999px; padding:1px 7px; font-size:9px; font-weight:700; }
+  .rich-card .rc-media { height:92px; background:linear-gradient(135deg,#2563eb,#1e40af); display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:800; letter-spacing:.3px; margin:8px 0 0; position:relative; }
+  .rich-card .rc-media .rc-amt { font-size:22px; }
+  .rich-card .rc-head { padding:10px 14px 2px; }
   .rich-card .rc-head .t { font-weight:800; font-size:14px; }
-  .rich-card .rc-body { padding:12px 14px; font-size:12px; line-height:1.45; }
-  .rich-card .rc-actions { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 14px; }
-  .rich-card .chip { border:1.5px solid #2563eb; color:#2563eb; border-radius:999px; padding:5px 11px; font-size:11px; font-weight:600; }
+  .rich-card .rc-body { padding:4px 14px 10px; font-size:12px; line-height:1.45; }
+  .rich-card .rc-actions { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 10px; }
+  .rich-card .chip { border:1.5px solid #2563eb; color:#2563eb; border-radius:999px; padding:5px 11px; font-size:11px; font-weight:600; background:#fff; }
+  .rich-card .chip.action { background:#2563eb; color:#fff; border-color:#2563eb; }
+  .rich-card .rc-feat { border-top:1px solid #eef2ff; padding:7px 14px; font-size:9.5px; color:#64748b; display:flex; flex-wrap:wrap; gap:8px; }
+  .rich-card .rc-feat span { display:inline-flex; align-items:center; gap:3px; }
+  .rc-receipt { align-self:flex-start; font-size:10px; color:#2563eb; padding:2px 14px; }
   .email-msg { background:#fff; animation:pop .3s ease; }
   .email-head { padding:14px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:8px; }
   .email-head .av { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#0f766e,#2dd4bf); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; }
@@ -134,10 +142,17 @@ const steps = [
     text:"Hi Dana, following up on your past-due balance of $84.00. Reply HELP and I'll make it easy — pay in full or split into smaller payments." },
   { ch:'sms', dir:'note', text:'⏳ 4 more days — still silent.' },
 
-  // BEAT 3 — Escalate to RCS rich card. No response.
-  { act:['STEP 3 · Day 7','Still silent → escalate to RCS'], ch:'rcs', dir:'out', cost:COST.rcs,
-    reason:'Agent decision: still no response → escalate to RCS rich card (tap-to-act, ~$0.012). Falls back to SMS if the device can\'t render RCS.',
-    card:{ title:'Let\'s resolve your $84.00 balance', body:'Tap an option — no call, no hold.', actions:['💳 Pay now','📅 Split into payments','🙋 I need help'] } },
+  // BEAT 3 — Escalate to RCS. Showcase RCS's rich features. No response.
+  { act:['STEP 3 · Day 7','Still silent → escalate to RCS (branded, interactive)'], ch:'rcs', dir:'out', cost:COST.rcs,
+    reason:'Agent decision: still no response → escalate to RCS. Branded verified sender, rich media, and tap-to-act buttons (~$0.012). Auto-falls back to SMS if the device can\'t render RCS.',
+    card:{
+      sender:'Recovery Agent', verified:true,
+      media:'$84.00', mediaCaption:'PAST DUE',
+      title:'Let\'s resolve your balance', body:'No call, no hold — just tap. Your service stays on while you\'re on a plan.',
+      replies:['💳 Pay now','📅 Split into payments'],
+      cardActions:['☎ Call me','🙋 I need help'],
+      features:['✓ Verified sender','🖼 Rich media','⌨ Typing shown','✓✓ Read receipts','↩ SMS fallback'] },
+    receipt:'✓✓ Read · 2:14 PM' },
   { ch:'rcs', dir:'note', text:'⏳ 3 more days — no tap, no reply.' },
 
   // BEAT 4 — Escalate to WhatsApp (high-value/overdue). Customer ENGAGES.
@@ -155,6 +170,23 @@ const steps = [
 const screens = { sms:document.getElementById('screen-sms'), rcs:document.getElementById('screen-rcs'), whatsapp:document.getElementById('screen-whatsapp'), email:document.getElementById('screen-email') };
 const LABEL = { sms:'📱 SMS', rcs:'💬 RCS', whatsapp:'📲 WhatsApp', email:'📧 EMAIL' };
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function buildRichCard(c){
+  // Backward-compat: old {title, body, actions:[...]}
+  if(c.actions && !c.replies && !c.cardActions){
+    return '<div class="rc-head"><div class="t">'+c.title+'</div></div><div class="rc-body">'+c.body+'</div>'+
+      '<div class="rc-actions">'+c.actions.map(a=>'<span class="chip">'+a+'</span>').join('')+'</div>';
+  }
+  let h='';
+  if(c.sender){ h+='<div class="rc-sender">'+c.sender+(c.verified?' <span class="rc-verified">✓ Verified</span>':'')+'</div>'; }
+  if(c.media){ h+='<div class="rc-media"><div><div class="rc-amt">'+c.media+'</div>'+(c.mediaCaption?'<div style="font-size:10px;opacity:.85">'+c.mediaCaption+'</div>':'')+'</div></div>'; }
+  if(c.title){ h+='<div class="rc-head"><div class="t">'+c.title+'</div></div>'; }
+  if(c.body){ h+='<div class="rc-body">'+c.body+'</div>'; }
+  const replies=(c.replies||[]).map(a=>'<span class="chip">'+a+'</span>');
+  const acts=(c.cardActions||[]).map(a=>'<span class="chip action">'+a+'</span>');
+  if(replies.length||acts.length){ h+='<div class="rc-actions">'+replies.concat(acts).join('')+'</div>'; }
+  if(c.features){ h+='<div class="rc-feat">'+c.features.map(f=>'<span>'+f+'</span>').join('')+'</div>'; }
+  return h;
+}
 function setActive(ch){ document.querySelectorAll('.phone').forEach(p=>p.classList.remove('active')); if(ch) document.getElementById('phone-'+ch).classList.add('active'); }
 function down(ch){ screens[ch].scrollTop = screens[ch].scrollHeight; }
 function updateStatus(){ document.getElementById('st-status').textContent = state.status; document.getElementById('st-spend').textContent = '$'+state.spend.toFixed(4); document.getElementById('st-emails').textContent = state.emails; }
@@ -169,8 +201,9 @@ async function render(s){
   if(s.tool){ const c=document.createElement('div'); c.className='tool-chip'; c.textContent='⚙ agent → '+s.tool; screens[s.ch].appendChild(c); down(s.ch); await sleep(500); }
   await typing(s.ch);
   if(s.status) state.status=s.status;
-  if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML='<div class="rc-head"><div class="t">'+s.card.title+'</div></div><div class="rc-body">'+s.card.body+'</div><div class="rc-actions">'+s.card.actions.map(a=>'<span class="chip">'+a+'</span>').join('')+'</div>'; screens[s.ch].appendChild(c); }
+  if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML=buildRichCard(s.card); screens[s.ch].appendChild(c); }
   else if(s.text){ const b=document.createElement('div'); b.className='bubble in'; b.innerHTML='<span class="who">🤖 Recovery Agent</span>'+s.text; screens[s.ch].appendChild(b); }
+  if(s.receipt){ const r=document.createElement('div'); r.className='rc-receipt'; r.textContent=s.receipt; screens[s.ch].appendChild(r); }
   down(s.ch);
   if(s.email){ state.emails++; const e=screens.email.querySelector('.email-empty'); if(e) e.remove(); const m=document.createElement('div'); m.className='email-msg'; m.innerHTML='<div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div><div class="email-subject">'+s.email.subject+'</div><div class="email-body">'+s.email.body+'</div>'; screens.email.appendChild(m); document.getElementById('phone-email').classList.add('active'); await sleep(300); document.getElementById('phone-email').classList.remove('active'); setActive(s.ch); }
   updateStatus(); await sleep(300);
@@ -248,8 +281,9 @@ if(new URLSearchParams(location.search).get('autoplay')==='1'){ window.addEventL
     if(s.cost){ state.spend += s.cost; }
     if(s.tool){ const c=document.createElement('div'); c.className='tool-chip'; c.textContent='⚙ agent → '+s.tool; screens[s.ch].appendChild(c); }
     if(s.status) state.status=s.status;
-    if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML='<div class="rc-head"><div class="t">'+s.card.title+'</div></div><div class="rc-body">'+s.card.body+'</div><div class="rc-actions">'+s.card.actions.map(a=>'<span class="chip">'+a+'</span>').join('')+'</div>'; screens[s.ch].appendChild(c); }
+    if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML=buildRichCard(s.card); screens[s.ch].appendChild(c); }
     else if(s.text){ const b=document.createElement('div'); b.className='bubble in'; b.innerHTML='<span class="who">🤖 Recovery Agent</span>'+s.text; screens[s.ch].appendChild(b); }
+    if(s.receipt){ const r=document.createElement('div'); r.className='rc-receipt'; r.textContent=s.receipt; screens[s.ch].appendChild(r); }
     down(s.ch);
     if(s.email){ state.emails++; const e=screens.email.querySelector('.email-empty'); if(e) e.remove(); const m=document.createElement('div'); m.className='email-msg'; m.innerHTML='<div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div><div class="email-subject">'+s.email.subject+'</div><div class="email-body">'+s.email.body+'</div>'; screens.email.appendChild(m); }
     updateStatus();
