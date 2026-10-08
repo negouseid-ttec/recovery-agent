@@ -1,14 +1,14 @@
 # 💸 Recovery Agent — Autonomous Omnichannel Revenue Recovery
 
+![Recovery Agent — a recovery story: problem → omnichannel escalation → hardship → payment → $84 recovered for ~5¢](demo/recovery-agent-demo.gif)
+
 > An agentic AI that recovers past-due telecom revenue through **conversation instead of robocalls** — reaching each customer on the channel they actually answer, negotiating payment plans, honoring hardship and opt-outs, and keeping one continuous thread across SMS, RCS, WhatsApp, and email.
 
 [![Built with AWS CDS](https://img.shields.io/badge/AWS-Communication%20Developer%20Services-orange)](https://aws.amazon.com/end-user-messaging/)
 [![Powered by Amazon Bedrock](https://img.shields.io/badge/Amazon%20Bedrock-Nova%202%20Lite-blue)](https://aws.amazon.com/bedrock/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-![Recovery Agent demo — the omnichannel escalation ladder](demo/recovery-agent-demo.gif)
-
-> **The escalation ladder in one view:** the agent reaches the customer on the cheapest channel first (📧 Email → 📱 SMS → 💬 RCS → 📲 WhatsApp), escalates only when there's no response, and **stops the moment the customer engages** — then reasons and acts (hardship hold, dispute pause, opt-out). Total outreach spend: ~5¢.
+> **The story in one view:** Telecom Co. hands a $84 past-due account to the agent. It escalates on silence — cheapest channel first (📧 Email → 📱 SMS → 💬 RCS → 📲 WhatsApp) — **stops the moment Dana engages**, detects hardship, sets an affordable plan, and takes the payment. **$84 recovered for ~5¢.**
 
 ## The Business Problem
 
