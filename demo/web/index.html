@@ -3,236 +3,239 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Recovery Agent — Omnichannel Escalation Ladder</title>
+<title>Recovery Agent — A Recovery Story</title>
 <style>
-  :root { --sms:#f59e0b; --rcs:#2563eb; --wa:#25d366; --email:#0f766e; --bg:#0f172a; --panel:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; }
+  :root { --sms:#f59e0b; --rcs:#2563eb; --wa:#25d366; --email:#0f766e; --bg:#0f172a; --panel:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --teal:#2dd4bf; }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:radial-gradient(1200px 700px at 50% -10%,#1e293b,var(--bg)); color:var(--ink); min-height:100vh; }
-  .topbar { text-align:center; padding:20px 20px 14px; }
-  .topbar h1 { font-size:24px; font-weight:800; letter-spacing:-.02em; }
+  html,body { height:100%; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); overflow:hidden; }
   .gradient-text { background:linear-gradient(90deg,#2dd4bf,#60a5fa,#a78bfa); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
-  .topbar p { color:var(--muted); font-size:13px; margin-top:6px; }
 
-  /* two-column: sidebar + thread */
-  .layout { display:flex; gap:0; max-width:900px; margin:0 auto; align-items:flex-start; }
-  .sidebar { position:sticky; top:16px; width:250px; flex:0 0 250px; padding:16px; align-self:flex-start; }
-  .sidebar h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:14px; }
-  /* vertical stacked ladder */
-  .ladder { display:flex; flex-direction:column; gap:0; }
-  .rung { display:flex; align-items:flex-start; gap:10px; opacity:.4; transition:opacity .3s; }
-  .rung.active { opacity:1; } .rung.done { opacity:.75; }
-  .rung .railcol { display:flex; flex-direction:column; align-items:center; }
-  .rung .dot { width:26px; height:26px; border-radius:50%; background:#1e293b; border:2px solid #334155; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; color:var(--muted); flex:0 0 auto; }
-  .rung.active .dot { background:linear-gradient(135deg,#0f766e,#2563eb); border-color:#2dd4bf; color:#fff; }
-  .rung.done .dot { background:#0f766e; border-color:#0f766e; color:#fff; font-size:0; }
-  .rung.done .dot::after { content:'✓'; font-size:13px; }
-  .rung .rail { width:2px; flex:1; min-height:26px; background:#334155; margin:2px 0; }
-  .rung:last-child .rail { display:none; }
-  .rung .meta { padding-bottom:16px; }
-  .rung .meta .ch { font-size:13px; font-weight:700; color:var(--ink); }
-  .rung .meta .day { font-size:11px; color:var(--muted); }
-  .status-strip { display:flex; flex-direction:column; gap:7px; margin-top:18px; font-size:12px; color:var(--muted); }
-  .status-strip .chip { background:var(--panel); border:1px solid #334155; border-radius:8px; padding:7px 11px; } .status-strip b { color:var(--ink); }
+  /* a frame fills the viewport; only the active one shows */
+  .stage { position:relative; height:100vh; width:100vw; }
+  .frame { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; padding:48px 24px 110px; text-align:center; animation:fadein .5s ease; }
+  .frame.show { display:flex; }
+  @keyframes fadein { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
+  @keyframes pop { from{opacity:0;transform:scale(.96);} to{opacity:1;transform:none;} }
 
-  /* timeline column (right) */
-  .thread { flex:1; max-width:420px; padding:16px 16px 160px; display:flex; flex-direction:column; }
-  .divider { text-align:center; margin:18px 0; position:relative; animation:fade .5s ease; }
-  .divider::before { content:''; position:absolute; left:0; right:0; top:50%; height:1px; background:#334155; }
-  .divider span { position:relative; background:#0f172a; padding:4px 14px; border:1px solid #334155; border-radius:999px; font-size:11px; color:var(--muted); font-style:italic; }
-  @keyframes fade { from{opacity:0;transform:translateY(-6px);} to{opacity:1;transform:none;} }
+  .eyebrow { font-size:13px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
+  .big { font-size:clamp(30px,5vw,52px); font-weight:900; line-height:1.08; letter-spacing:-.02em; }
+  .sub { font-size:clamp(15px,2vw,19px); color:var(--muted); margin-top:16px; max-width:720px; line-height:1.5; }
+  .pill { display:inline-block; margin-top:22px; background:var(--panel); border:1px solid #334155; border-radius:999px; padding:8px 18px; font-size:13px; color:var(--muted); }
 
-  /* reason banner above each phone */
-  .reason { background:#052e2b; border:1px solid #0f766e; border-left:4px solid #2dd4bf; color:#99f6e4; border-radius:8px; padding:9px 14px; font-size:12px; line-height:1.4; margin:0 0 10px; animation:fade .4s ease; }
-  .step-label { text-align:center; font-size:12px; font-weight:700; color:var(--ink); margin-bottom:8px; }
-  .step-label .n { color:var(--muted); font-weight:500; margin-right:6px; }
+  /* problem stat grid */
+  .stats { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin-top:30px; }
+  .stat { background:var(--panel); border:1px solid #334155; border-radius:14px; padding:20px 24px; min-width:200px; max-width:260px; }
+  .stat .k { font-size:30px; font-weight:900; color:#f87171; }
+  .stat .k.good { color:var(--teal); }
+  .stat .d { font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4; }
 
-  /* phone */
-  .phone { width:340px; margin:0 auto 6px; background:#0b1220; border:9px solid #0b1220; border-radius:38px; box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 0 0 2px #1e293b; overflow:hidden; display:flex; flex-direction:column; animation:rise .45s ease; }
-  @keyframes rise { from{opacity:0;transform:translateY(16px);} to{opacity:1;transform:none;} }
-  .notch { height:22px; display:flex; align-items:center; justify-content:center; } .notch::after{content:'';width:84px;height:6px;background:#1e293b;border-radius:999px;}
-  .app-bar { padding:10px 14px; display:flex; align-items:center; gap:10px; font-weight:700; font-size:14px; color:#fff; }
-  .sms .app-bar{background:var(--sms);} .rcs .app-bar{background:var(--rcs);} .whatsapp .app-bar{background:#075e54;} .email .app-bar{background:var(--email);}
+  /* "N DAYS LATER" interstitial */
+  .later { background:radial-gradient(circle at 50% 40%, #1e293b, #0b1220); }
+  .later .big { font-size:clamp(44px,8vw,96px); color:#fde68a; text-shadow:0 4px 0 rgba(0,0,0,.25); font-style:italic; }
+  .later .eyebrow { color:#fbbf24; }
+
+  /* phone frame */
+  .phone { width:340px; background:#0b1220; border:9px solid #0b1220; border-radius:38px; box-shadow:0 20px 50px rgba(0,0,0,.5),inset 0 0 0 2px #1e293b; overflow:hidden; display:flex; flex-direction:column; animation:pop .5s ease; }
+  .notch{height:22px;display:flex;align-items:center;justify-content:center;}.notch::after{content:'';width:84px;height:6px;background:#1e293b;border-radius:999px;}
+  .app-bar{padding:11px 14px;display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;color:#fff;}
+  .sms .app-bar{background:var(--sms);}.rcs .app-bar{background:var(--rcs);}.whatsapp .app-bar{background:#075e54;}.email .app-bar{background:var(--email);}
   .app-bar .avatar{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:15px;}
-  .app-bar .sub{font-weight:400;font-size:11px;opacity:.9;display:block;}
-  .screen { background:#0e1726; padding:14px; display:flex; flex-direction:column; gap:9px; min-height:150px; }
-  .whatsapp .screen{background:#0b141a;} .email .screen{background:#f8fafc;}
-  .bubble { max-width:86%; padding:10px 13px; border-radius:16px; font-size:13px; line-height:1.45; word-wrap:break-word; animation:fade .3s ease; }
+  .app-bar .sub2{font-weight:400;font-size:11px;opacity:.9;display:block;margin-top:0;}
+  .screen{background:#0e1726;padding:14px;display:flex;flex-direction:column;gap:9px;min-height:120px;}
+  .whatsapp .screen{background:#0b141a;}.email .screen{background:#f8fafc;}
+  .bubble{max-width:88%;padding:10px 13px;border-radius:16px;font-size:13px;line-height:1.45;word-wrap:break-word;text-align:left;}
   .bubble.in{align-self:flex-start;background:#1e293b;color:var(--ink);border-bottom-left-radius:4px;}
   .bubble.out{align-self:flex-end;color:#fff;border-bottom-right-radius:4px;}
-  .sms .bubble.out{background:var(--sms);} .rcs .bubble.out{background:var(--rcs);} .whatsapp .bubble.out{background:#005c4b;} .whatsapp .bubble.in{background:#1f2c33;}
+  .sms .bubble.out{background:var(--sms);}.rcs .bubble.out{background:var(--rcs);}.whatsapp .bubble.out{background:#005c4b;}.whatsapp .bubble.in{background:#1f2c33;}
   .bubble .who{font-size:10px;font-weight:700;opacity:.7;margin-bottom:2px;display:block;}
   .tool-chip{align-self:center;font-size:10px;color:var(--muted);background:rgba(148,163,184,.12);border:1px solid #334155;border-radius:999px;padding:3px 10px;font-family:monospace;}
-  /* email */
-  .email-msg{background:#fff;border-radius:10px;overflow:hidden;animation:fade .3s ease;}
+  .email-msg{background:#fff;border-radius:10px;overflow:hidden;text-align:left;}
   .email-head{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;}
   .email-head .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#0f766e,#2dd4bf);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
-  .email-head .name{font-weight:700;color:#0f172a;font-size:13px;} .email-head .addr{color:#64748b;font-size:11px;}
+  .email-head .name{font-weight:700;color:#0f172a;font-size:13px;}.email-head .addr{color:#64748b;font-size:11px;}
   .email-subject{padding:10px 14px 2px;font-weight:800;color:#0f172a;font-size:14px;}
   .email-body{padding:2px 14px 14px;color:#334155;font-size:12px;line-height:1.5;}
   .email-body .badge{display:inline-block;background:#ecfdf5;color:#065f46;border-left:3px solid #0f766e;padding:8px 10px;border-radius:4px;margin:8px 0;font-size:11px;}
-  /* rich RCS card */
-  .rich-card{align-self:stretch;background:#fff;color:#0f172a;border-radius:14px;overflow:hidden;animation:fade .3s ease;box-shadow:0 4px 14px rgba(0,0,0,.3);}
+  .rich-card{align-self:stretch;background:#fff;color:#0f172a;border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.3);text-align:left;}
   .rich-card .rc-sender{display:flex;align-items:center;gap:6px;padding:9px 12px 0;font-size:11px;color:#1e40af;font-weight:700;}
-  .rich-card .rc-verified{display:inline-flex;align-items:center;gap:3px;background:#dbeafe;color:#1e40af;border-radius:999px;padding:1px 7px;font-size:9px;font-weight:700;}
-  .rich-card .rc-media{height:96px;background:linear-gradient(135deg,#2563eb,#1e40af);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;margin:8px 0 0;}
-  .rich-card .rc-media .rc-amt{font-size:24px;font-weight:800;} .rich-card .rc-media .rc-cap{font-size:10px;opacity:.85;}
-  .rich-card .rc-head{padding:10px 14px 2px;} .rich-card .rc-head .t{font-weight:800;font-size:14px;}
+  .rich-card .rc-verified{background:#dbeafe;color:#1e40af;border-radius:999px;padding:1px 7px;font-size:9px;font-weight:700;}
+  .rich-card .rc-media{height:92px;background:linear-gradient(135deg,#2563eb,#1e40af);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;margin-top:8px;}
+  .rich-card .rc-media .rc-amt{font-size:24px;font-weight:800;}.rich-card .rc-media .rc-cap{font-size:10px;opacity:.85;}
+  .rich-card .rc-head{padding:10px 14px 2px;}.rich-card .rc-head .t{font-weight:800;font-size:14px;}
   .rich-card .rc-body{padding:4px 14px 10px;font-size:12px;line-height:1.45;}
   .rich-card .rc-actions{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px;}
-  .rich-card .chip{border:1.5px solid #2563eb;color:#2563eb;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:600;background:#fff;}
+  .rich-card .chip{border:1.5px solid #2563eb;color:#2563eb;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:600;}
   .rich-card .chip.action{background:#2563eb;color:#fff;}
   .rich-card .rc-feat{border-top:1px solid #eef2ff;padding:8px 14px;font-size:9.5px;color:#64748b;display:flex;flex-wrap:wrap;gap:9px;}
-  .rc-receipt{align-self:flex-start;font-size:10px;color:#2563eb;margin-top:2px;}
-  .cost-tag{align-self:center;font-size:10px;color:var(--muted);margin-top:6px;}
+  .framecap { margin-top:18px; font-size:14px; color:var(--ink); max-width:560px; line-height:1.5; }
+  .framecap .reason { color:var(--teal); font-weight:600; }
+  .daytag { font-size:13px; color:var(--muted); margin-bottom:14px; }
 
-  /* engaged / resolved banner */
-  .resolved{max-width:360px;margin:14px auto 0;background:#052e2b;border:1px solid #0f766e;border-radius:12px;padding:14px 16px;text-align:center;animation:rise .45s ease;}
-  .resolved .t{color:#2dd4bf;font-weight:800;font-size:14px;} .resolved .s{color:#99f6e4;font-size:11px;margin-top:4px;}
+  /* cost ledger */
+  .ledger { background:var(--panel); border:1px solid #334155; border-radius:16px; padding:24px 28px; min-width:320px; text-align:left; }
+  .ledger .row { display:flex; justify-content:space-between; gap:40px; padding:8px 0; font-size:15px; border-bottom:1px dashed #334155; }
+  .ledger .row:last-of-type { border-bottom:none; }
+  .ledger .ch { color:var(--ink); } .ledger .amt { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .ledger .total { margin-top:12px; padding-top:12px; border-top:2px solid #2dd4bf; display:flex; justify-content:space-between; font-size:19px; font-weight:800; }
+  .ledger .total .amt { color:var(--teal); }
 
-  /* controls (sticky bottom) */
-  .controls{position:fixed;bottom:0;left:0;right:0;padding:16px;display:flex;gap:12px;justify-content:center;background:linear-gradient(0deg,#0f172a 70%,rgba(15,23,42,0));z-index:20;}
-  button{background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .15s;}
+  /* success */
+  .success { background:radial-gradient(circle at 50% 30%, #052e2b, #0b1220); }
+  .success .headline { font-size:clamp(34px,6vw,64px); font-weight:900; }
+  .success .vs { display:flex; gap:28px; flex-wrap:wrap; justify-content:center; margin-top:26px; }
+  .success .vcard { background:rgba(15,23,42,.6); border:1px solid #0f766e; border-radius:16px; padding:22px 26px; min-width:240px; }
+  .success .vcard .k { font-size:34px; font-weight:900; color:var(--teal); }
+  .success .vcard .d { font-size:12px; color:#99f6e4; margin-top:6px; line-height:1.4; }
+  .srcnote { font-size:10px; color:var(--muted); margin-top:22px; }
+
+  .controls{position:fixed;bottom:0;left:0;right:0;padding:16px;display:flex;gap:12px;justify-content:center;background:linear-gradient(0deg,#0f172a 72%,rgba(15,23,42,0));z-index:20;}
+  button{background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;border:none;border-radius:10px;padding:12px 26px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .15s;}
   button:hover{transform:translateY(-2px);} button:disabled{opacity:.4;cursor:not-allowed;transform:none;}
   button.ghost{background:#1e293b;border:1px solid #334155;}
+  .counter{position:fixed;top:14px;right:18px;font-size:12px;color:var(--muted);z-index:20;}
 </style>
 </head>
 <body>
-  <div class="topbar">
-    <h1>💸 <span class="gradient-text">Recovery Agent</span></h1>
-    <p>Omnichannel escalation ladder — cheapest channel first, escalate only on silence, stop on engagement</p>
-  </div>
-
-  <div class="layout">
-    <aside class="sidebar">
-      <h2>Escalation path</h2>
-      <div class="ladder" id="ladder"></div>
-      <div class="status-strip">
-        <div class="chip">Account <b>ACCT-TEL-80231</b></div>
-        <div class="chip">Past due <b>$84.00</b></div>
-        <div class="chip">Status <b id="st-status">past_due</b></div>
-        <div class="chip">Outreach spend <b id="st-spend">$0.0000</b></div>
-      </div>
-    </aside>
-    <div class="thread" id="thread"></div>
-  </div>
-
-  <div class="controls">
-    <button class="ghost" id="prevBtn" onclick="prev()" disabled>‹ Back</button>
-    <button id="nextBtn" onclick="next()">Step 1 of 5 — Start ›</button>
-    <button class="ghost" onclick="location.reload()">↻ Reset</button>
-  </div>
-
+<div class="counter" id="counter"></div>
+<div class="stage" id="stage"></div>
+<div class="controls">
+  <button class="ghost" id="prevBtn" onclick="go(-1)" disabled>‹ Back</button>
+  <button id="nextBtn" onclick="go(1)">▶ Start the story</button>
+  <button class="ghost" onclick="location.reload()">↻ Restart</button>
+</div>
 <script>
 const COST = { email:0.0001, sms:0.0075, rcs:0.012, whatsapp:0.035 };
-const LABEL = { email:'📧 Email', sms:'📱 SMS', rcs:'💬 RCS', whatsapp:'📲 WhatsApp' };
-const SUB = {
-  email:'Amazon SES · ~$0.0001/msg', sms:'AWS EUM · SMS · ~$0.0075/msg',
-  rcs:'AWS EUM · RCS · ~$0.012/msg', whatsapp:'AWS EUM Social · WhatsApp · ~$0.035/msg' };
+const SUB = { email:'Amazon SES · ~$0.0001/msg', sms:'AWS EUM · SMS · ~$0.0075/msg', rcs:'AWS EUM · RCS · ~$0.012/msg', whatsapp:'AWS EUM Social · WhatsApp · ~$0.035/msg' };
 
-// Each STEP = a phone for one channel + the days-later gap that precedes it.
-const steps = [
-  { ch:'email', day:'Day 0', gap:null,
-    reason:'Agent decision: start on the cheapest, least-intrusive channel — Email (~$0.0001).',
-    email:{ subject:'Your account is past due — we can help',
-      body:'Hi Dana, your account has a past-due balance of <b>$84.00</b>. Reply or we\'ll follow up — we can split it into smaller payments.<div class="badge">📧 Attempt 1 · Email · ~$0.0001</div>' } },
+function phone(ch, inner){
+  return `<div class="phone ${ch}"><div class="notch"></div>
+    <div class="app-bar"><div class="avatar">${ch==='email'?'📧':'💸'}</div>
+    <div>${ch==='email'?'Inbox':ch==='sms'?'Messages':'Recovery Agent'}<span class="sub2">${SUB[ch]}</span></div></div>
+    <div class="screen">${inner}</div></div>`;
+}
+const richCard = `
+  <div class="rich-card">
+    <div class="rc-sender">Recovery Agent <span class="rc-verified">✓ Verified</span></div>
+    <div class="rc-media"><div><div class="rc-amt">$84.00</div><div class="rc-cap">PAST DUE</div></div></div>
+    <div class="rc-head"><div class="t">Let's resolve your balance</div></div>
+    <div class="rc-body">No call, no hold — just tap. Your service stays on while you're on a plan.</div>
+    <div class="rc-actions"><span class="chip">💳 Pay now</span><span class="chip">📅 Split into payments</span><span class="chip action">☎ Call me</span><span class="chip action">🙋 I need help</span></div>
+    <div class="rc-feat"><span>✓ Verified sender</span><span>🖼 Rich media</span><span>⌨ Typing shown</span><span>✓✓ Read receipts</span><span>↩ SMS fallback</span></div>
+  </div>`;
 
-  { ch:'sms', day:'Day 3', gap:'3 days later — email unopened, no reply',
-    reason:'No response on email → escalate to SMS (higher reach, read fast, ~$0.0075).',
-    out:'Hi Dana, following up on your past-due balance of $84.00. Reply HELP and I\'ll make it easy — pay in full or split into smaller payments.' },
+// ─── FRAMES ──────────────────────────────────────────────────────────────
+const frames = [
+  // 1 Title
+  { html:`<div class="eyebrow">AWS Communication Developer Services</div>
+    <div class="big">💸 A <span class="gradient-text">Recovery</span> Story</div>
+    <div class="sub">How an agentic AI recovers past-due revenue through conversation — on the cheapest channel that works, and knows when to stop.</div>` },
 
-  { ch:'rcs', day:'Day 7', gap:'4 more days — still silent',
-    reason:'Still no response → escalate to RCS: branded verified sender, rich media, tap-to-act buttons (~$0.012). Auto-falls back to SMS if the device can\'t render RCS.',
-    card:{ sender:'Recovery Agent', verified:true, media:'$84.00', mediaCaption:'PAST DUE',
-      title:'Let\'s resolve your balance', body:'No call, no hold — just tap. Your service stays on while you\'re on a plan.',
-      replies:['💳 Pay now','📅 Split into payments'], cardActions:['☎ Call me','🙋 I need help'],
-      features:['✓ Verified sender','🖼 Rich media','⌨ Typing shown','✓✓ Read receipts','↩ SMS fallback'] },
-    receipt:'✓✓ Read · 2:14 PM' },
+  // 2 Problem
+  { html:`<div class="eyebrow">The Problem</div>
+    <div class="big">Telecom Co. is bleeding revenue.</div>
+    <div class="stats">
+      <div class="stat"><div class="k">~3%</div><div class="d">recovered by automated robocalls — customers ignore them</div></div>
+      <div class="stat"><div class="k">$5–$25</div><div class="d">cost per live-agent call attempt — most reach voicemail</div></div>
+      <div class="stat"><div class="k">~11%</div><div class="d">of face value is all the collections industry recovers (ACA)</div></div>
+    </div>
+    <div class="sub">Chasing people harder costs more and drives them to churn. There had to be a better way.</div>` },
 
-  { ch:'whatsapp', day:'Day 10', gap:'3 more days — no tap, no reply',
-    reason:'No response on cheaper channels + 32 days overdue → escalate to WhatsApp, the richest/most personal channel (~$0.035). Reserved for accounts worth the touch.',
-    out:'Hi Dana, it\'s your telecom. I don\'t want your service to pause. I\'m here on WhatsApp whenever it\'s easiest — we can sort your $84.00 balance together, no pressure.',
-    reply:'honestly I just lost my job, money is really tight' },
+  // 3 Meet Dana
+  { html:`<div class="eyebrow">One account</div>
+    <div class="big">Meet Dana.</div>
+    <div class="sub">Her account is <b>$84.00 past due</b>, <b>32 days</b> overdue. Service pauses in <b>10 days</b>.<br>Telecom Co. hands it to <span class="gradient-text">Recovery Agent</span>.</div>
+    <div class="pill">Account ACCT-TEL-80231 · status: past_due</div>` },
 
-  { ch:'whatsapp', day:null, gap:null, engaged:true,
-    reason:'Customer engaged → escalation STOPS. The agent reasons & acts: detects hardship, applies a hold, suppresses fees, confirms by email.',
-    tool:'apply_hardship + send_receipt', status:'hardship_hold',
-    in:'I\'m really sorry to hear that — thank you for telling me. I\'ve paused everything: no late fees, no interruption. A specialist will follow up to set terms that work for you. You don\'t need to do anything right now.',
-    email:{ subject:'Hardship Hold Applied — ACCT-TEL-80231',
-      body:'We\'ve paused collection and late fees on your account.<div class="badge">🤝 No service interruption · a specialist will follow up</div>' } },
+  // 4 Email Day 0
+  { day:'Day 0', ch:'email', spend:'email',
+    html:`<div class="daytag">Step 1 · Day 0</div>${phone('email',`
+      <div class="email-msg"><div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div>
+      <div class="email-subject">Your account is past due — we can help</div>
+      <div class="email-body">Hi Dana, your account has a past-due balance of <b>$84.00</b>. Reply or we'll follow up — we can split it into smaller payments.<div class="badge">📧 Attempt 1 · Email · ~$0.0001</div></div></div>`)}
+      <div class="framecap"><span class="reason">Agent decision:</span> start on the cheapest, least-intrusive channel — Email.</div>` },
+
+  // 5 LATER
+  { later:true, html:`<div class="eyebrow">meanwhile…</div><div class="big">3 DAYS LATER</div><div class="sub">Email unopened. No reply.</div>` },
+
+  // 6 SMS Day 3
+  { day:'Day 3', ch:'sms', spend:'sms',
+    html:`<div class="daytag">Step 2 · Day 3</div>${phone('sms',`
+      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Hi Dana, following up on your past-due balance of $84.00. Reply HELP and I'll make it easy — pay in full or split into smaller payments.</div>`)}
+      <div class="framecap"><span class="reason">Agent decision:</span> no response on email → escalate to SMS (higher reach, read fast).</div>` },
+
+  // 7 LATER
+  { later:true, html:`<div class="eyebrow">meanwhile…</div><div class="big">4 DAYS LATER</div><div class="sub">Still silent.</div>` },
+
+  // 8 RCS Day 7
+  { day:'Day 7', ch:'rcs', spend:'rcs',
+    html:`<div class="daytag">Step 3 · Day 7</div>${phone('rcs', richCard)}
+      <div class="framecap"><span class="reason">Agent decision:</span> escalate to RCS — branded verified sender, rich media, tap-to-act. Auto-falls back to SMS if the device can't render RCS.</div>` },
+
+  // 9 LATER
+  { later:true, html:`<div class="eyebrow">meanwhile…</div><div class="big">3 DAYS LATER</div><div class="sub">No tap. No reply.</div>` },
+
+  // 10 WhatsApp Day 10 — Dana replies
+  { day:'Day 10', ch:'whatsapp', spend:'whatsapp',
+    html:`<div class="daytag">Step 4 · Day 10</div>${phone('whatsapp',`
+      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Hi Dana, it's your telecom. I don't want your service to pause. I'm here on WhatsApp whenever it's easiest — we can sort your $84.00 balance together, no pressure.</div>
+      <div class="bubble out">honestly I just lost my job, money is really tight</div>`)}
+      <div class="framecap"><span class="reason">Agent decision:</span> no response on cheaper channels + severely overdue → escalate to WhatsApp, the richest, most personal channel. And this time… she replies.</div>` },
+
+  // 11 Hardship — agent acts
+  { ch:'whatsapp', status:'hardship_hold',
+    html:`<div class="daytag">Step 5 · The agent reasons &amp; acts</div>${phone('whatsapp',`
+      <div class="tool-chip">⚙ agent → apply_hardship</div>
+      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>I'm really sorry to hear that — thank you for telling me. I've paused late fees and the suspension. Let's set up something that actually fits: how about <b>3 payments of $28</b>, first one in two weeks?</div>
+      <div class="bubble out">that actually works. thank you</div>`)}
+      <div class="framecap"><span class="reason">It doesn't push.</span> It detects hardship, pauses fees, honors the person — and offers a plan she can afford. Compliance + empathy, built in.</div>` },
+
+  // 12 Payment — resolved
+  { ch:'whatsapp', status:'plan_active · paid',
+    html:`<div class="daytag">Step 6 · Resolved with a payment</div>${phone('whatsapp',`
+      <div class="bubble out">just paid the first $28 👍</div>
+      <div class="tool-chip">⚙ agent → record_payment + send_receipt</div>
+      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Got it — $28.00 received, $56.00 across your next two payments. Your service stays on. I've emailed your receipt. Thank you, Dana. 🎉</div>`)}
+      <div class="framecap"><span class="reason">Account recovered.</span> Past-due → on an active plan, first payment in, service never interrupted, customer retained.</div>` },
+
+  // 13 Cost breakdown
+  { html:`<div class="eyebrow">What did the recovery cost?</div>
+    <div class="ledger">
+      <div class="row"><span class="ch">📧 Email · Day 0</span><span class="amt">$0.0001</span></div>
+      <div class="row"><span class="ch">📱 SMS · Day 3</span><span class="amt">$0.0075</span></div>
+      <div class="row"><span class="ch">💬 RCS · Day 7</span><span class="amt">$0.0120</span></div>
+      <div class="row"><span class="ch">📲 WhatsApp · Day 10</span><span class="amt">$0.0350</span></div>
+      <div class="total"><span>Total outreach</span><span class="amt">≈ $0.0546</span></div>
+    </div>
+    <div class="sub">Four channels, ten days, one AI agent — about <b>five cents</b>.</div>` },
+
+  // 14 Success
+  { success:true, html:`<div class="eyebrow">The result</div>
+    <div class="headline"><span class="gradient-text">$84.00 recovered</span><br>for about <span style="color:var(--teal)">5¢</span>.</div>
+    <div class="vs">
+      <div class="vcard"><div class="k">~$0.05</div><div class="d">AI outreach to recover this account</div></div>
+      <div class="vcard"><div class="k">$5–$25</div><div class="d">cost of a single live-agent call attempt</div></div>
+    </div>
+    <div class="sub">At scale on a <b>$10M</b> past-due book: recover seven figures in revenue <b>and</b> cut cost-to-collect <b>25–35%</b> (Deloitte) — while keeping customers.</div>
+    <div class="srcnote">Sources: CFPB · ACA International · Gartner · Deloitte (2025)</div>` },
 ];
 
-const RUNGS = [
-  {ch:'email',t:'Email · Day 0'},{ch:'sms',t:'SMS · Day 3'},{ch:'rcs',t:'RCS · Day 7'},
-  {ch:'whatsapp',t:'WhatsApp · Day 10'},{ch:'whatsapp',t:'Resolved'}];
-const thread = document.getElementById('thread');
-const state = { spend:0, i:-1 };
-
-function renderLadder(){
-  const L=document.getElementById('ladder'); L.innerHTML='';
-  RUNGS.forEach((r,idx)=>{
-    const el=document.createElement('div'); el.className='rung'+(idx===state.i?' active':idx<state.i?' done':'');
-    el.innerHTML='<div class="railcol"><span class="dot">'+(idx+1)+'</span><span class="rail"></span></div>'+
-      '<div class="meta"><div class="ch">'+LABEL[r.ch]+'</div><div class="day">'+r.t+'</div></div>';
-    L.appendChild(el);
-  });
-}
-function buildRichCard(c){
-  let h='';
-  h+='<div class="rc-sender">'+c.sender+(c.verified?' <span class="rc-verified">✓ Verified</span>':'')+'</div>';
-  if(c.media) h+='<div class="rc-media"><div><div class="rc-amt">'+c.media+'</div><div class="rc-cap">'+(c.mediaCaption||'')+'</div></div></div>';
-  h+='<div class="rc-head"><div class="t">'+c.title+'</div></div><div class="rc-body">'+c.body+'</div>';
-  const r=(c.replies||[]).map(a=>'<span class="chip">'+a+'</span>');
-  const a=(c.cardActions||[]).map(x=>'<span class="chip action">'+x+'</span>');
-  h+='<div class="rc-actions">'+r.concat(a).join('')+'</div>';
-  if(c.features) h+='<div class="rc-feat">'+c.features.map(f=>'<span>'+f+'</span>').join('')+'</div>';
-  return h;
-}
-function phoneFor(s){
-  const p=document.createElement('div'); p.className='phone '+s.ch;
-  p.innerHTML='<div class="notch"></div><div class="app-bar"><div class="avatar">'+(s.ch==='email'?'📧':'💸')+'</div><div>'+
-    (s.ch==='email'?'Inbox':s.ch==='sms'?'Messages':'Recovery Agent')+'<span class="sub">'+SUB[s.ch]+'</span></div></div>';
-  const sc=document.createElement('div'); sc.className='screen';
-  if(s.tool){ const t=document.createElement('div'); t.className='tool-chip'; t.textContent='⚙ agent → '+s.tool; sc.appendChild(t); }
-  if(s.out){ const b=document.createElement('div'); b.className='bubble in'; b.innerHTML='<span class="who">🤖 Recovery Agent</span>'+s.out; sc.appendChild(b); }
-  if(s.card){ const c=document.createElement('div'); c.className='rich-card'; c.innerHTML=buildRichCard(s.card); sc.appendChild(c); }
-  if(s.receipt){ const r=document.createElement('div'); r.className='rc-receipt'; r.textContent=s.receipt; sc.appendChild(r); }
-  if(s.reply){ const b=document.createElement('div'); b.className='bubble out'; b.textContent=s.reply; sc.appendChild(b); }
-  if(s.in){ const b=document.createElement('div'); b.className='bubble in'; b.innerHTML='<span class="who">🤖 Recovery Agent</span>'+s.in; sc.appendChild(b); }
-  if(s.email){ const e=document.createElement('div'); e.className='email-msg';
-    e.innerHTML='<div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div><div class="email-subject">'+s.email.subject+'</div><div class="email-body">'+s.email.body+'</div>';
-    sc.appendChild(e); }
-  p.appendChild(sc);
-  if(s.cost!==false && COST[s.ch]!==undefined && !s.engaged){ const ct=document.createElement('div'); ct.className='cost-tag'; ct.textContent='sent via '+LABEL[s.ch]+' · ~$'+COST[s.ch].toFixed(4); sc.appendChild(ct); }
-  return p;
-}
-function renderStep(idx){
-  const s=steps[idx];
-  if(s.gap){ const d=document.createElement('div'); d.className='divider'; d.innerHTML='<span>⏳ '+s.gap+'</span>'; thread.appendChild(d); }
-  const lab=document.createElement('div'); lab.className='step-label';
-  lab.innerHTML='<span class="n">Step '+(idx+1)+' of 5</span>'+(s.day?s.day+' · ':'')+(s.engaged?'Customer engaged — ladder stops':LABEL[s.ch]);
-  thread.appendChild(lab);
-  const r=document.createElement('div'); r.className='reason'; r.textContent=s.reason; thread.appendChild(r);
-  if(s.engaged){ const rz=document.createElement('div'); rz.className='resolved'; rz.innerHTML='<div class="t">✅ Resolved on WhatsApp</div><div class="s">Hardship hold applied · fees suppressed · confirmed by email</div>'; thread.appendChild(rz); }
-  thread.appendChild(phoneFor(s));
-  if(COST[s.ch]!==undefined && !s.engaged) state.spend += COST[s.ch];
-  if(s.status) document.getElementById('st-status').textContent=s.status;
-  document.getElementById('st-spend').textContent='$'+state.spend.toFixed(4);
-}
-function syncButtons(){
-  document.getElementById('prevBtn').disabled = state.i<=0;
+const stage=document.getElementById('stage');
+let i=0, spend=0;
+function render(){
+  const f=frames[i]; if(!f) return;
+  stage.innerHTML=`<div class="frame show ${f.later?'later':''} ${f.success?'success':''}">${f.html}</div>`;
+  document.getElementById('counter').textContent='Frame '+(i+1)+' / '+frames.length;
+  document.getElementById('prevBtn').disabled=i<=0;
   const n=document.getElementById('nextBtn');
-  if(state.i>=steps.length-1){ n.disabled=true; n.textContent='✓ Recovery complete'; }
-  else n.textContent = state.i<0 ? 'Step 1 of 5 — Start ›' : 'Step '+(state.i+2)+' of 5 ›';
+  if(i>=frames.length-1){ n.disabled=true; n.textContent='✓ The End'; }
+  else { n.disabled=false; n.textContent = i===0 ? '▶ Start the story' : 'Next ›'; }
 }
-function next(){ if(state.i>=steps.length-1) return; state.i++; renderStep(state.i); renderLadder(); syncButtons();
-  thread.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'}); }
-function prev(){ if(state.i<=0) return;
-  // rebuild from scratch up to i-1 (keeps costs/state honest)
-  const target=state.i-1; thread.innerHTML=''; state.spend=0; state.i=-1; document.getElementById('st-status').textContent='past_due';
-  for(let k=0;k<=target;k++){ state.i=k; renderStep(k); }
-  renderLadder(); syncButtons(); thread.lastElementChild.scrollIntoView({block:'center'}); }
-renderLadder(); syncButtons();
-if(new URLSearchParams(location.search).get('autoplay')==='1'){ (async()=>{ while(state.i<steps.length-1){ next(); await new Promise(r=>setTimeout(r,1400)); } })(); }
+function go(d){ const t=i+d; if(t<0||t>=frames.length) return; i=t; render(); }
+const qp=new URLSearchParams(location.search).get('frame'); if(qp!==null){ i=Math.max(0,Math.min(frames.length-1,+qp-1)); }
+render();
+document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight') go(1); if(e.key==='ArrowLeft') go(-1); });
+if(new URLSearchParams(location.search).get('autoplay')==='1'){ (async()=>{ while(i<frames.length-1){ go(1); await new Promise(r=>setTimeout(r,2600)); } })(); }
 </script>
 </body>
 </html>
