@@ -232,7 +232,7 @@ function render(){
   else { n.disabled=false; n.textContent = i===0 ? '▶ Start the story' : 'Next ›'; }
 }
 function go(d){ const t=i+d; if(t<0||t>=frames.length) return; i=t; render(); }
-const qp=new URLSearchParams(location.search).get('frame'); if(qp!==null){ i=Math.max(0,Math.min(frames.length-1,+qp-1)); }
+if(new URLSearchParams(location.search).get("nofx")==="1"){const st=document.createElement("style");st.textContent="*{animation:none !important}";document.head.appendChild(st);} const qp=new URLSearchParams(location.search).get('frame'); if(qp!==null){ i=Math.max(0,Math.min(frames.length-1,+qp-1)); }
 render();
 document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight') go(1); if(e.key==='ArrowLeft') go(-1); });
 if(new URLSearchParams(location.search).get('autoplay')==='1'){ (async()=>{ while(i<frames.length-1){ go(1); await new Promise(r=>setTimeout(r,2600)); } })(); }
