@@ -8,6 +8,7 @@
 import {
   PinpointSMSVoiceV2Client,
   SendTextMessageCommand,
+  SendRcsMessageCommand,
 } from '@aws-sdk/client-pinpoint-sms-voice-v2';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -106,20 +107,24 @@ function splitSmsMessage(text: string, maxLen = 160): string[] {
   return segments;
 }
 
-// ─── RCS via EUM ────────────────────────────────────────────────────────────
+// ─── RCS via EUM (real SendRcsMessage API) ──────────────────────────────────
+// RCS_AGENT_ID is the origination identity for RCS; EUM auto-falls back to SMS
+// (billed as SMS) when the device/carrier can't receive RCS.
 
 async function sendRcs(to: string, text: string) {
   console.log(`[sender] RCS → ${to}: "${text.substring(0, 50)}..."`);
 
-  // RCS uses the EUM SendRcsMessage API
-  // For text-only, we use a plain text RBM message
+  if (!RCS_AGENT_ID) {
+    return sendSms(to, text);
+  }
+
   await eum.send(
-    new SendTextMessageCommand({
+    new SendRcsMessageCommand({
+      OriginationIdentity: RCS_AGENT_ID,
       DestinationPhoneNumber: to,
-      MessageBody: text,
-      ConfigurationSetName: 'ra-messaging',
-      // RCS delivery is attempted first, SMS is automatic fallback
-      // when the phone pool includes both an RCS agent and SMS numbers
+      RcsMessageContent: {
+        Content: { TextMessage: { Body: text } },
+      },
     }),
   );
 
@@ -138,33 +143,33 @@ async function sendRichCard(message: {
 }) {
   console.log(`[sender] Rich Card → ${message.recipientId}: "${message.title}"`);
 
-  // RCS rich card via EUM
-  // The RCS Business Messaging API supports standalone rich cards
-  // with title, description, media, and suggested actions
-  const rcsMessage = {
-    richCard: {
-      standaloneCard: {
-        cardContent: {
-          title: message.title,
-          description: message.description,
-          ...(message.imageUrl && {
-            media: { height: 'MEDIUM', contentInfo: { fileUrl: message.imageUrl, forceRefresh: false } },
-          }),
-          suggestions: message.suggestions.map((s) => ({
-            reply: { text: s.text, postbackData: s.postbackData ?? s.text },
-          })),
+  if (!RCS_AGENT_ID) {
+    const flat = `${message.title}\n${message.description}\n` +
+      message.suggestions.map((s) => `• ${s.text}`).join('\n');
+    return sendSms(message.recipientId, flat);
+  }
+
+  await eum.send(
+    new SendRcsMessageCommand({
+      OriginationIdentity: RCS_AGENT_ID,
+      DestinationPhoneNumber: message.recipientId,
+      RcsMessageContent: {
+        Content: {
+          RichCard: {
+            CardContent: {
+              Title: message.title,
+              Description: message.description,
+              ...(message.imageUrl && {
+                Media: { Height: 'MEDIUM', FileUrl: message.imageUrl },
+              }),
+              Suggestions: message.suggestions.map((s) => ({
+                Reply: { Text: s.text, PostbackData: s.postbackData ?? s.text },
+              })),
+            },
+            CardOrientation: 'VERTICAL',
+          },
         },
       },
-    },
-  };
-
-  // Send via EUM RCS API
-  // In production, this uses SendRcsMessage with the RBM JSON payload
-  await eum.send(
-    new SendTextMessageCommand({
-      DestinationPhoneNumber: message.recipientId,
-      MessageBody: JSON.stringify(rcsMessage),
-      ConfigurationSetName: 'ra-messaging',
     }),
   );
 
@@ -180,27 +185,31 @@ async function sendCarousel(message: {
 }) {
   console.log(`[sender] Carousel → ${message.recipientId}: ${message.cards.length} cards`);
 
-  // RCS carousel — multiple cards in a horizontal scroll
-  const rcsMessage = {
-    richCard: {
-      carouselCard: {
-        cardWidth: 'MEDIUM',
-        cardContents: message.cards.map((card) => ({
-          title: card.title,
-          description: card.description,
-          suggestions: card.suggestions.map((s) => ({
-            reply: { text: s.text, postbackData: s.text },
-          })),
-        })),
-      },
-    },
-  };
+  if (!RCS_AGENT_ID) {
+    const flat = message.cards
+      .map((c) => `${c.title}\n${c.description}\n` + c.suggestions.map((s) => `• ${s.text}`).join('\n'))
+      .join('\n\n');
+    return sendSms(message.recipientId, flat);
+  }
 
   await eum.send(
-    new SendTextMessageCommand({
+    new SendRcsMessageCommand({
+      OriginationIdentity: RCS_AGENT_ID,
       DestinationPhoneNumber: message.recipientId,
-      MessageBody: JSON.stringify(rcsMessage),
-      ConfigurationSetName: 'ra-messaging',
+      RcsMessageContent: {
+        Content: {
+          Carousel: {
+            CardWidth: 'MEDIUM',
+            CardContents: message.cards.map((card) => ({
+              Title: card.title,
+              Description: card.description,
+              Suggestions: card.suggestions.map((s) => ({
+                Reply: { Text: s.text, PostbackData: s.text },
+              })),
+            })),
+          },
+        },
+      },
     }),
   );
 

@@ -14,7 +14,7 @@
     "@aws-sdk/client-bedrock-runtime": "3.682.0",
     "@aws-sdk/client-dynamodb": "3.682.0",
     "@aws-sdk/client-lambda": "3.682.0",
-    "@aws-sdk/client-pinpoint-sms-voice-v2": "3.682.0",
+    "@aws-sdk/client-pinpoint-sms-voice-v2": "^3.1147.0",
     "@aws-sdk/client-sesv2": "3.682.0",
     "@aws-sdk/client-socialmessaging": "3.682.0",
     "@aws-sdk/lib-dynamodb": "3.682.0",
