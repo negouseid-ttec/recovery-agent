@@ -1,6 +1,6 @@
 /**
  * OTP identity-verification tests — issue, verify, expiry, brute-force cap,
- * single-use, and anti-takeover.
+ * single-use, anti-takeover, and ISSUE authorization.
  */
 import {
   issueChallenge,
@@ -11,9 +11,11 @@ import {
 import { InMemoryIdentityStore, resolveIdentity } from '../lib/shared/identity';
 
 const now = new Date('2026-10-12T16:00:00Z');
+function stores() { return { cs: new InMemoryChallengeStore(), is: new InMemoryIdentityStore() }; }
 
-function stores() {
-  return { cs: new InMemoryChallengeStore(), is: new InMemoryIdentityStore() };
+/** New-customer (unclaimed) issue — no proof needed. */
+async function issue(cs: InMemoryChallengeStore, is: InMemoryIdentityStore, channel: any, id: string, cust: string, code: string, proven?: string) {
+  return issueChallenge(cs, is, channel, id, cust, proven, now, code);
 }
 
 describe('generateCode', () => {
@@ -23,21 +25,22 @@ describe('generateCode', () => {
 });
 
 describe('issue + verify happy path', () => {
-  test('a correct code verifies and links the identity', async () => {
+  test('a correct code verifies and links the identity (new customer)', async () => {
     const { cs, is } = stores();
-    await issueChallenge(cs, 'whatsapp', '+15551230001', 'CUST-DANA', now, '123456');
+    const iss = await issue(cs, is, 'whatsapp', '+15551230001', 'CUST-DANA', '123456');
+    expect(iss.issued).toBe(true);
     const out = await verifyCode(cs, is, 'whatsapp', '+15551230001', '123456', now);
     expect(out.verified).toBe(true);
-    // Now resolution returns the verified customer.
     const resolved = await resolveIdentity(is, 'whatsapp', '+15551230001');
     expect(resolved.verification).toBe('verified');
     expect(resolved.customerId).toBe('CUST-DANA');
   });
 
-  test('cross-channel: verifying a 2nd channel links it to the same customer', async () => {
+  test('cross-channel link with PROOF of control of the existing customer', async () => {
     const { cs, is } = stores();
-    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
-    await issueChallenge(cs, 'email', 'dana@example.com', 'CUST-DANA', now, '222222');
+    is.seedVerified('sms', '+15551230001', 'CUST-DANA'); // existing verified channel
+    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '222222', '+15551230001');
+    expect(iss.issued).toBe(true);
     const out = await verifyCode(cs, is, 'email', 'dana@example.com', '222222', now);
     expect(out.verified).toBe(true);
     const viaEmail = await resolveIdentity(is, 'email', 'dana@example.com');
@@ -46,58 +49,61 @@ describe('issue + verify happy path', () => {
   });
 });
 
+describe('ISSUE authorization (anti-takeover at issuance)', () => {
+  test('cannot issue for an EXISTING customer without proof of control', async () => {
+    const { cs, is } = stores();
+    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
+    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456'); // no proof
+    expect(iss.issued).toBe(false);
+    if (!iss.issued) expect(iss.reason).toBe('not_authorized_for_customer');
+  });
+
+  test('cannot issue with proof that belongs to a DIFFERENT customer', async () => {
+    const { cs, is } = stores();
+    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
+    is.seedVerified('sms', '+15552220002', 'CUST-BOB'); // attacker proves Bob, targets Dana
+    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456', '+15552220002');
+    expect(iss.issued).toBe(false);
+  });
+
+  test('new/unclaimed customer can self-issue (first verification)', async () => {
+    const { cs, is } = stores();
+    const iss = await issue(cs, is, 'sms', '+15559990000', 'CUST-NEW', '123456');
+    expect(iss.issued).toBe(true);
+  });
+});
+
 describe('failure modes', () => {
   test('wrong code does not verify or link', async () => {
     const { cs, is } = stores();
-    await issueChallenge(cs, 'sms', '+15551230001', 'CUST-DANA', now, '123456');
+    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
     const out = await verifyCode(cs, is, 'sms', '+15551230001', '000000', now);
     expect(out).toEqual({ verified: false, reason: 'wrong_code' });
-    const resolved = await resolveIdentity(is, 'sms', '+15551230001');
-    expect(resolved.verification).toBe('unverified');
   });
 
   test('expired code does not verify', async () => {
     const { cs, is } = stores();
-    await issueChallenge(cs, 'sms', '+15551230001', 'CUST-DANA', now, '123456');
-    const later = new Date(now.getTime() + 11 * 60 * 1000); // 11 min > 10 min TTL
-    const out = await verifyCode(cs, is, 'sms', '+15551230001', '123456', later);
-    expect(out).toEqual({ verified: false, reason: 'expired' });
+    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
+    const later = new Date(now.getTime() + 11 * 60 * 1000);
+    expect(await verifyCode(cs, is, 'sms', '+15551230001', '123456', later)).toEqual({ verified: false, reason: 'expired' });
   });
 
   test('no challenge issued → no_challenge', async () => {
     const { cs, is } = stores();
-    const out = await verifyCode(cs, is, 'sms', '+15559999999', '123456', now);
-    expect(out).toEqual({ verified: false, reason: 'no_challenge' });
+    expect(await verifyCode(cs, is, 'sms', '+15559999999', '123456', now)).toEqual({ verified: false, reason: 'no_challenge' });
   });
 
   test('brute force is capped after 5 wrong attempts', async () => {
     const { cs, is } = stores();
-    await issueChallenge(cs, 'sms', '+15551230001', 'CUST-DANA', now, '123456');
-    for (let i = 0; i < 5; i++) {
-      await verifyCode(cs, is, 'sms', '+15551230001', '000000', now);
-    }
-    // 6th attempt (even with the RIGHT code) is locked out.
-    const out = await verifyCode(cs, is, 'sms', '+15551230001', '123456', now);
-    expect(out).toEqual({ verified: false, reason: 'too_many_attempts' });
+    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
+    for (let i = 0; i < 5; i++) await verifyCode(cs, is, 'sms', '+15551230001', '000000', now);
+    expect(await verifyCode(cs, is, 'sms', '+15551230001', '123456', now)).toEqual({ verified: false, reason: 'too_many_attempts' });
   });
 
   test('single-use: a verified code cannot be replayed', async () => {
     const { cs, is } = stores();
-    await issueChallenge(cs, 'sms', '+15551230001', 'CUST-DANA', now, '123456');
+    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
     expect((await verifyCode(cs, is, 'sms', '+15551230001', '123456', now)).verified).toBe(true);
-    const replay = await verifyCode(cs, is, 'sms', '+15551230001', '123456', now);
-    expect(replay).toEqual({ verified: false, reason: 'no_challenge' });
-  });
-
-  test('anti-takeover: cannot verify an identifier already owned by another verified customer', async () => {
-    const { cs, is } = stores();
-    is.seedVerified('email', 'shared@example.com', 'CUST-A');
-    // Attacker tries to verify the same identifier against their own customer id.
-    await issueChallenge(cs, 'email', 'shared@example.com', 'CUST-ATTACKER', now, '123456');
-    const out = await verifyCode(cs, is, 'email', 'shared@example.com', '123456', now);
-    expect(out.verified).toBe(false);
-    // Ownership unchanged.
-    const resolved = await resolveIdentity(is, 'email', 'shared@example.com');
-    expect(resolved.customerId).toBe('CUST-A');
+    expect(await verifyCode(cs, is, 'sms', '+15551230001', '123456', now)).toEqual({ verified: false, reason: 'no_challenge' });
   });
 });

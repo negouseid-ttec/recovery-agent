@@ -1,6 +1,6 @@
 # 💸 Recovery Agent — Autonomous Omnichannel Revenue Recovery
 
-![Recovery Agent — a recovery story: problem → omnichannel escalation → hardship → payment → $84 recovered for ~5¢](demo/recovery-agent-demo.gif)
+![Recovery Agent — the autonomous decision layer: problem → omnichannel escalation → hardship → $28 paid, $56 scheduled for ~5¢ messaging cost](demo/recovery-agent-demo.gif)
 
 > An agentic AI that recovers past-due telecom revenue through **conversation instead of robocalls** — reaching each customer on the channel they actually answer, negotiating payment plans, honoring hardship and opt-outs, and keeping one continuous thread across SMS, RCS, WhatsApp, and email.
 
@@ -8,7 +8,7 @@
 [![Powered by Amazon Bedrock](https://img.shields.io/badge/Amazon%20Bedrock-Nova%202%20Lite-blue)](https://aws.amazon.com/bedrock/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **The story in one view:** Telecom Co. hands a $84 past-due account to the agent. It escalates on silence — cheapest channel first (📧 Email → 📱 SMS → 💬 RCS → 📲 WhatsApp) — **stops the moment Dana engages**, detects hardship, sets an affordable plan, and takes the payment. **$84 recovered for ~5¢.**
+> **The story in one view:** Telecom Co. hands a $84 past-due account to the agent. It escalates on silence — cheapest channel first (📧 Email → 📱 SMS → 💬 RCS → 📲 WhatsApp) — **stops the moment Dana engages**, detects hardship, and sets an affordable plan: **$28 paid, $56 scheduled** on an active plan — for **~5¢ estimated messaging cost**.
 
 ## The Business Problem
 
@@ -50,13 +50,24 @@ It reaches customers where they respond, offers real options with real numbers, 
 | **Cross-channel memory** | One DynamoDB thread per customer — pick up on WhatsApp exactly where the SMS left off |
 
 ## Architecture
-**Runtime architecture** — inbound channels → API Gateway → Nova triage → agent orchestrator ⇄ DynamoDB → channel sender → outbound channels:
+
+Four single-concept views — the runtime, the decision engine, the agent's tool belt, and how it integrates into a carrier.
+
+**1 · Runtime** — inbound reply → API Gateway → Nova triage → agent orchestrator ⇄ DynamoDB → channel sender → outbound reply:
 
 ![Runtime architecture](docs/architecture-runtime.png)
 
-**Escalation-ladder decision flow** — the "why" behind four channels: cheapest first, escalate only on silence, stop on engagement:
+**2 · Decision engine** — the escalation ladder: cheapest channel first, escalate only on silence, stop the instant the customer engages:
 
 ![Escalation-ladder decision flow](docs/architecture-decision-flow.png)
+
+**3 · The agent** — a Bedrock Converse loop with a 7-tool belt and compliance encoded as behavior (not a dialer):
+
+![Agent reasoning and tools](docs/architecture-agent-tools.png)
+
+**4 · Integration** — the AWS core is built and deployed; productizing it into a carrier is a set of connectors (billing, payments, compliance, Amazon Connect) plus standard carrier onboarding:
+
+![Enterprise integration](docs/architecture-integration.png)
 
 | Service | Role |
 |---|---|
@@ -87,6 +98,23 @@ Real AWS CDS calls, not mocks (all Bedrock via **Amazon Nova 2 Lite**):
 - **EUM SMS (live)** — `SendTextMessage` via `@aws-sdk/client-pinpoint-sms-voice-v2` (sandbox simulator; identical SDK path).
 - **WhatsApp** — `@aws-sdk/client-socialmessaging SendWhatsAppMessage` wired; fires once a WhatsApp Business number is registered through EUM Social (a Meta-side onboarding step, not a code change).
 
+## How a carrier adopts it
+
+The AWS core — four Lambdas, DynamoDB, Bedrock, the four CDS channels — is **built and deployed via CDK**. Turning it into a production collections product for a specific carrier is **four connectors** plus standard messaging onboarding (see diagram 4):
+
+| Connector | Direction | What it does | Status |
+|---|---|---|---|
+| **1 · Account ingestion** | inbound | Pull the past-due book from the carrier's billing/CRM/CIS (Amdocs, Netcracker, Salesforce) into `ra-accounts` — batch export / S3 drop / API poll, normalized to the shared account model | **TODO** — demo uses a seeded table |
+| **2 · Payment rail** | outbound | Hand the agent's payment / plan actions to a PCI-compliant processor (Stripe, ACH, card vault) via a tokenized hand-off — no card data ever touches the agent | **TODO** — demo records intent only |
+| **3 · Compliance & messaging config** | per-tenant | Quiet hours, frequency caps (FDCPA/Reg F, TCPA), the opt-out registry, plus carrier onboarding (10DLC brand reg, WhatsApp WABA, RCS agent) | **logic built** — needs per-tenant config + carrier onboarding (days) |
+| **4 · Amazon Connect** | inbound/voice | Hand off to (or receive from) an existing Amazon Connect contact center — the agent handles proactive digital outreach, Connect handles inbound voice and live-agent assist, sharing one customer thread | **integration path** — for the many target customers already on Connect |
+
+**Why a carrier buys it:** replace a **$5–25** live-agent call with a **~5¢** agent conversation on recoverable accounts (CFO); produce a **per-decision audit trail with the reason** every contact was made, on which channel, at what time — the question FDCPA/Reg F forces you to answer (compliance officer); and **detect hardship and offer an affordable plan instead of hounding**, protecting the subscriber relationship (CX/retention). The decision engine (`lib/shared/channel-strategy.ts`) returns a human-readable *reason* with every channel choice — that explainability is the moat.
+
+**The real gap it closes — channel continuity.** Most enterprises already *have* SMS, email, and a contact center. What they lack is **continuity between channels**: today they stitch the hand-offs together with kludgy back-office processes, so a customer who replied by SMS gets a fresh, context-free email the next day. Recovery Agent keeps **one continuous agent thread per customer across every channel** (one DynamoDB conversation, cross-channel memory) — it picks up on WhatsApp exactly where the SMS left off. That continuity, not the individual channels, is the product.
+
+**Where it fits — AWS-ecosystem customers.** The sharpest early target is a company **already on AWS (often Amazon Connect)** that hasn't yet adopted the native messaging + agentic-AI stack and is reaching for a third-party point solution (e.g. Sierra.ai) for automated outreach. Recovery Agent is the **native-AWS alternative** that keeps the workload on Amazon — a reason to deepen Connect/CDS adoption instead of bolting on an external tool. See **Connector 4** in the table above for the Amazon Connect hand-off path.
+
 ## Qualifying AWS CDS SDK usage (for judging)
 
 | CDS service | Package | Call site |
@@ -106,11 +134,11 @@ npm test                      # infra + logic tests
 npx cdk deploy --all
 ```
 
-The four-phone demo UI (`demo/web/index.html`) animates the full journey for the video — serve it with any static server.
+The demo UI (`demo/web/index.html`) is a 3-view judge-facing app — **Guided Demo** (Dana story + agent-intelligence panel), **Decision Lab** (interactive, clearly-simulated policy + ladder), and **Execution Evidence** (AWS/tool/policy timeline, LIVE-VERIFIED vs EXAMPLE). Serve with any static server; `?view=`, `?frame=`, `?autoplay=1`, `?nofx=1`. See `demo/DEMO_DELIVERABLES.md`.
 
 ## Demo Video
 
-🎥 **[3-minute demo](https://youtu.be/PLACEHOLDER)** — robocall problem → agent recovers a balance across four channels → the dollar-ROI close.
+🎥 **3-minute demo — _recording pending_** (script: `demo/VIDEO_SCRIPT.md`). The public YouTube/Vimeo URL will be added here and on the Devpost form before submission.
 
 ## Submission Artifacts
 
@@ -119,9 +147,9 @@ The four-phone demo UI (`demo/web/index.html`) animates the full journey for the
 | 1 | Code Repository | This repo |
 | 2 | Architecture Diagram | `docs/architecture-runtime.png` + `docs/architecture-decision-flow.png` |
 | 3 | Text Description | This README |
-| 4 | Demo Video | [YouTube](https://youtu.be/PLACEHOLDER) |
+| 4 | Demo Video | _recording pending — URL added before submission_ |
 | 5 | Deployed Project | CloudFront demo UI + deployed Lambdas (see Live Deployment Evidence) |
-| 6 | ACE Opportunity ID | `OPP-XXXXXXXXX` |
+| 6 | ACE Opportunity ID | `O29439654` |
 
 ## Sources
 

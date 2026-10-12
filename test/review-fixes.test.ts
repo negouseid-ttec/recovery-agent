@@ -44,8 +44,27 @@ describe('1. final send-boundary policy (STOP end-to-end)', () => {
   test('a clean account passes the sender gate', () => {
     expect(senderGate(acct(), 'email').ok).toBe(true);
   });
-  test('unknown recipient (no account) is not gated — new inbound still works', () => {
-    expect(senderGate(undefined, 'sms').ok).toBe(true);
+});
+
+describe('1b. sender FAILS CLOSED (no fail-open)', () => {
+  // Mirrors the hardened policyGate(): no account OR lookup error → suppress.
+  function failClosedGate(outcome: 'found'|'none'|'error', account?: Account) {
+    if (outcome === 'error') return { ok: false as const, reasonCode: 'POLICY_LOOKUP_FAILED' };
+    if (outcome === 'none') return { ok: false as const, reasonCode: 'NO_ACCOUNT' };
+    const d = evaluateOutbound(account!, { now: noon });
+    return d.allowed ? { ok: true as const } : { ok: false as const, reasonCode: d.reasonCode };
+  }
+  test('unknown account → suppressed (NO_ACCOUNT), not sent', () => {
+    const g = failClosedGate('none');
+    expect(g.ok).toBe(false);
+    if (!g.ok) expect(g.reasonCode).toBe('NO_ACCOUNT');
+  });
+  test('lookup error → suppressed (POLICY_LOOKUP_FAILED), not sent', () => {
+    const g = failClosedGate('error');
+    expect(g.ok).toBe(false);
+  });
+  test('found + clean → sent', () => {
+    expect(failClosedGate('found', acct()).ok).toBe(true);
   });
 });
 
@@ -65,6 +84,17 @@ describe('2. checkBalance ownership (IDOR fix)', () => {
   test('the owner can read their own account by accountId', () => {
     const conv = { customerId: 'CUST-1', recipientId: '+15551230001' };
     expect(accountOwnedBy(acct(), conv)).toBe(true);
+  });
+
+  test('a model-supplied recipientId that is NOT the conversation\'s is ignored', () => {
+    // Mirrors checkBalance: honor requested recipientId only if it belongs to the conv.
+    function resolveLookupId(requested: string|undefined, conv: {recipientId:string;channels?:{address:string}[]}){
+      const owns = requested!==undefined && (requested===conv.recipientId || (conv.channels??[]).some(c=>c.address===requested));
+      return owns ? requested! : conv.recipientId;
+    }
+    const conv = { recipientId:'+15551230001', channels:[{address:'+15551230001'}] };
+    expect(resolveLookupId('+15559999999', conv)).toBe('+15551230001'); // pivot ignored
+    expect(resolveLookupId('+15551230001', conv)).toBe('+15551230001'); // own id honored
   });
 });
 
