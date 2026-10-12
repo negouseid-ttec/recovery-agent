@@ -18,7 +18,7 @@ import type { OutboundMessage, Conversation, Channel } from '../../shared/types'
 
 const eum = new PinpointSMSVoiceV2Client({});
 const ses = new SESv2Client({});
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } });
 
 const CONVERSATION_TABLE = process.env.CONVERSATION_TABLE!;
 const SES_FROM_EMAIL = process.env.SES_FROM_EMAIL ?? 'recovery@example.com';
