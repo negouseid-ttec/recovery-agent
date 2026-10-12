@@ -7,6 +7,7 @@ import { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, UpdateCom
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { v4 as uuid } from 'uuid';
 import type { Conversation, Account, PaymentPlan, Promise as PromiseRecord, Dispute } from '../../shared/types';
+import { evaluatePaymentPlan, evaluateAmount } from '../../shared/recovery-policy';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const lambdaClient = new LambdaClient({});
@@ -27,6 +28,8 @@ export async function executeToolCall(
       return checkBalance(input, conversation);
     case 'offer_payment_plan':
       return offerPaymentPlan(input, conversation);
+    case 'accept_payment_plan':
+      return acceptPaymentPlan(input, conversation);
     case 'record_promise_to_pay':
       return recordPromise(input, conversation);
     case 'apply_hardship':
@@ -54,6 +57,17 @@ function sanitizeAccount(a: Account): Record<string, unknown> {
     status: a.status,
     monthlyCharge: dollars(a.monthlyChargeCents),
   };
+}
+
+/**
+ * Ownership check: the account must belong to this conversation's customer,
+ * matched by canonical customerId when present, else by the recipientId the
+ * conversation is keyed on. Blocks acting on another customer's account.
+ */
+function accountOwnedBy(account: Account, conversation: Conversation): boolean {
+  if (conversation.accountIds?.length && conversation.accountIds.includes(account.accountId)) return true;
+  if (account.customerId && conversation.customerId) return account.customerId === conversation.customerId;
+  return account.recipientId === conversation.recipientId;
 }
 
 async function checkBalance(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {
@@ -86,14 +100,32 @@ async function offerPaymentPlan(input: Record<string, unknown>, conversation: Co
     firstPaymentDate?: string;
   };
 
+  if (!accountId || installments === undefined || !frequency) {
+    return { success: false, message: 'Missing required argument: accountId, installments, and frequency are required.' };
+  }
+
   const res = await ddb.send(new GetCommand({ TableName: ACCOUNT_TABLE, Key: { accountId } }));
   if (!res.Item) return { success: false, message: `Account ${accountId} not found.` };
   const acct = res.Item as Account;
 
-  const n = Math.max(2, Math.min(6, Math.round(installments)));
+  // Ownership: the account must belong to this conversation's customer.
+  if (!accountOwnedBy(acct, conversation)) {
+    return { success: false, message: 'Not authorized: this account does not belong to this customer.' };
+  }
+
+  // Deterministic policy: installment bounds + collectible/not-held status.
+  const policy = evaluatePaymentPlan(acct, Math.round(Number(installments)));
+  if (!policy.allowed) {
+    return { success: false, policy, message: `Cannot offer a plan: ${policy.reason}` };
+  }
+
+  const n = Math.round(Number(installments));
   const installmentCents = Math.ceil(acct.pastDueCents / n);
   const first = firstPaymentDate ?? new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
 
+  // Honest state machine: an OFFERED plan is "proposed", not "accepted". It
+  // becomes accepted only when the customer agrees (acceptPaymentPlan), and no
+  // funds are "collected" until a payment provider confirms.
   const plan: PaymentPlan = {
     planId: uuid(),
     accountId,
@@ -103,10 +135,57 @@ async function offerPaymentPlan(input: Record<string, unknown>, conversation: Co
     installments: n,
     frequency,
     firstPaymentDate: first,
-    status: 'accepted',
+    status: 'proposed',
     createdAt: new Date().toISOString(),
   };
   await ddb.send(new PutCommand({ TableName: PLAN_TABLE, Item: plan }));
+
+  return {
+    success: true,
+    planId: plan.planId,
+    status: 'proposed',
+    plan: {
+      total: dollars(plan.totalCents),
+      installment: dollars(installmentCents),
+      installments: n,
+      frequency,
+      firstPaymentDate: first,
+    },
+    message:
+      `Here's a plan option: ${n} ${frequency} payments of ${dollars(installmentCents)}, ` +
+      `first on ${first}. This is an OFFER — reply to confirm and I'll set it up.`,
+  };
+}
+
+async function acceptPaymentPlan(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {
+  const { accountId, planId } = input as { accountId: string; planId: string };
+  if (!accountId || !planId) {
+    return { success: false, message: 'Missing required argument: accountId and planId are required.' };
+  }
+  const [acctRes, planRes] = await Promise.all([
+    ddb.send(new GetCommand({ TableName: ACCOUNT_TABLE, Key: { accountId } })),
+    ddb.send(new GetCommand({ TableName: PLAN_TABLE, Key: { planId } })),
+  ]);
+  if (!acctRes.Item) return { success: false, message: `Account ${accountId} not found.` };
+  if (!planRes.Item) return { success: false, message: `Plan ${planId} not found.` };
+  const acct = acctRes.Item as Account;
+  const plan = planRes.Item as PaymentPlan;
+  if (!accountOwnedBy(acct, conversation) || plan.accountId !== accountId) {
+    return { success: false, message: 'Not authorized: plan does not belong to this customer/account.' };
+  }
+  // Idempotent: accepting an already-accepted/active plan is a no-op success.
+  if (plan.status === 'accepted' || plan.status === 'active') {
+    return { success: true, status: plan.status, message: 'Plan already accepted.' };
+  }
+  await ddb.send(
+    new UpdateCommand({
+      TableName: PLAN_TABLE,
+      Key: { planId },
+      UpdateExpression: 'SET #s = :s',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: { ':s': 'accepted' },
+    }),
+  );
   await ddb.send(
     new UpdateCommand({
       TableName: ACCOUNT_TABLE,
@@ -116,18 +195,9 @@ async function offerPaymentPlan(input: Record<string, unknown>, conversation: Co
       ExpressionAttributeValues: { ':s': 'plan_active', ':d': new Date().toISOString() },
     }),
   );
-
-  return {
-    success: true,
-    plan: {
-      total: dollars(plan.totalCents),
-      installment: dollars(installmentCents),
-      installments: n,
-      frequency,
-      firstPaymentDate: first,
-    },
-    message: `Plan set: ${n} ${frequency} payments of ${dollars(installmentCents)}, first on ${first}.`,
-  };
+  // NOTE: 'plan_active' means an accepted schedule exists — NOT that any funds
+  // have been collected. Payment capture is a separate, provider-confirmed step.
+  return { success: true, status: 'accepted', message: 'Payment plan accepted and activated. No funds have been charged yet; each installment is collected on its due date.' };
 }
 
 async function recordPromise(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {
@@ -136,10 +206,20 @@ async function recordPromise(input: Record<string, unknown>, conversation: Conve
     amountCents?: number;
     promisedDate: string;
   };
+  if (!accountId || !promisedDate) {
+    return { success: false, message: 'Missing required argument: accountId and promisedDate are required.' };
+  }
   const res = await ddb.send(new GetCommand({ TableName: ACCOUNT_TABLE, Key: { accountId } }));
   if (!res.Item) return { success: false, message: `Account ${accountId} not found.` };
   const acct = res.Item as Account;
+  if (!accountOwnedBy(acct, conversation)) {
+    return { success: false, message: 'Not authorized: this account does not belong to this customer.' };
+  }
   const amount = amountCents ?? acct.pastDueCents;
+  const bounds = evaluateAmount(acct, amount);
+  if (!bounds.allowed) {
+    return { success: false, policy: bounds, message: `Cannot record that promise: ${bounds.reason}` };
+  }
 
   const promise: PromiseRecord = {
     promiseId: uuid(),
@@ -165,21 +245,34 @@ async function recordPromise(input: Record<string, unknown>, conversation: Conve
 
 async function applyHardship(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {
   const { accountId, reason } = input as { accountId: string; reason: string };
+  if (!accountId || !reason) {
+    return { success: false, message: 'Missing required argument: accountId and reason are required.' };
+  }
   const res = await ddb.send(new GetCommand({ TableName: ACCOUNT_TABLE, Key: { accountId } }));
   if (!res.Item) return { success: false, message: `Account ${accountId} not found.` };
+  const acct = res.Item as Account;
+  if (!accountOwnedBy(acct, conversation)) {
+    return { success: false, message: 'Not authorized: this account does not belong to this customer.' };
+  }
 
+  // Record the hold and clear the scheduled suspension date in OUR record.
+  // We only claim what this write actually did — we do not assert a downstream
+  // billing system has canceled anything it hasn't confirmed.
   await ddb.send(
     new UpdateCommand({
       TableName: ACCOUNT_TABLE,
       Key: { accountId },
-      UpdateExpression: 'SET #s = :s, suspensionDate = :null',
+      UpdateExpression: 'SET #s = :s REMOVE suspensionDate',
       ExpressionAttributeNames: { '#s': 'status' },
-      ExpressionAttributeValues: { ':s': 'hardship_hold', ':null': null },
+      ExpressionAttributeValues: { ':s': 'hardship_hold' },
     }),
   );
   return {
     success: true,
-    message: `Hardship hold applied (${reason}). Late fees suspended, no service interruption, most lenient terms available. A specialist will follow up.`,
+    status: 'hardship_hold',
+    message:
+      `Hardship hold recorded (${reason}). Collection outreach is now suppressed on this account and ` +
+      `the scheduled suspension is paused in our records. A hardship specialist will confirm the final terms with you.`,
   };
 }
 
