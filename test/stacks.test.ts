@@ -14,10 +14,11 @@ describe('Recovery Agent infrastructure', () => {
     planTable: data.planTable,
     identityTable: data.identityTable,
     decisionTable: data.decisionTable,
+    challengeTable: data.challengeTable,
   });
 
-  test('Data stack creates 5 DynamoDB tables', () => {
-    Template.fromStack(data).resourceCountIs('AWS::DynamoDB::Table', 5);
+  test('Data stack creates 6 DynamoDB tables', () => {
+    Template.fromStack(data).resourceCountIs('AWS::DynamoDB::Table', 6);
   });
 
   test('Accounts table has by-recipient and by-status GSIs', () => {
@@ -36,8 +37,8 @@ describe('Recovery Agent infrastructure', () => {
     t.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'ra-decision-log' });
   });
 
-  test('Agent stack creates orchestrator, triage, sender, and outreach Lambdas', () => {
-    Template.fromStack(agent).resourceCountIs('AWS::Lambda::Function', 4);
+  test('Agent stack creates orchestrator, triage, sender, outreach, and verification Lambdas', () => {
+    Template.fromStack(agent).resourceCountIs('AWS::Lambda::Function', 5);
   });
 
   test('Sender has EUM, Social Messaging, and SES permissions', () => {

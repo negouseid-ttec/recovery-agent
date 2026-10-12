@@ -289,6 +289,22 @@ export interface ResolvedIdentity {
   isNew: boolean;
 }
 
+/** A pending OTP verification challenge (TTL-expiring, single-use). */
+export interface VerificationChallenge {
+  /** PK: the normalized channel identifier being verified. */
+  channelIdentifier: string;
+  channel: Channel;
+  /** The customer this identifier will be linked to on success. */
+  customerId: string;
+  /** The one-time code (never logged). */
+  code: string;
+  attempts: number;
+  createdAt: string;
+  expiresAt: string;
+  /** DynamoDB TTL (epoch seconds). */
+  ttl: number;
+}
+
 // ─── AI Next-Best-Action ─────────────────────────────────────────────────────
 
 export type NbaAction = 'contact' | 'wait' | 'offer_plan' | 'hold' | 'escalate' | 'close';

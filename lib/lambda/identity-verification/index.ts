@@ -1,0 +1,90 @@
+/**
+ * Identity Verification Lambda.
+ *
+ * Two actions:
+ *   { action: 'issue',  channel, identifier, customerId } → mints an OTP, stores
+ *     a TTL challenge, and dispatches the code out-of-band via the channel sender
+ *     (SMS/RCS/WhatsApp/email). The code is never returned or logged.
+ *   { action: 'verify', channel, identifier, code }       → checks the code and,
+ *     on success, links the identifier to the customer as VERIFIED.
+ *
+ * This is the trigger that promotes resolveIdentity() results from unverified to
+ * verified, enabling safe cross-channel account access.
+ */
+
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+import type { Handler } from 'aws-lambda';
+import type { Channel, IdentityLink, VerificationChallenge, OutboundMessage } from '../../shared/types';
+import { issueChallenge, verifyCode, type ChallengeStore } from '../../shared/identity-verification';
+import type { IdentityStore } from '../../shared/identity';
+
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const lambdaClient = new LambdaClient({});
+
+const IDENTITY_TABLE = process.env.IDENTITY_TABLE!;
+const CHALLENGE_TABLE = process.env.CHALLENGE_TABLE!;
+const SENDER_FUNCTION = process.env.SENDER_FUNCTION_NAME ?? 'ra-channel-sender';
+
+const identityStore: IdentityStore = {
+  async getLink(id: string): Promise<IdentityLink | undefined> {
+    const r = await ddb.send(new GetCommand({ TableName: IDENTITY_TABLE, Key: { channelIdentifier: id } }));
+    return r.Item as IdentityLink | undefined;
+  },
+  async putLink(link: IdentityLink): Promise<void> {
+    await ddb.send(new PutCommand({ TableName: IDENTITY_TABLE, Item: link }));
+  },
+};
+
+const challengeStore: ChallengeStore = {
+  async get(id: string): Promise<VerificationChallenge | undefined> {
+    const r = await ddb.send(new GetCommand({ TableName: CHALLENGE_TABLE, Key: { channelIdentifier: id } }));
+    return r.Item as VerificationChallenge | undefined;
+  },
+  async put(c: VerificationChallenge): Promise<void> {
+    await ddb.send(new PutCommand({ TableName: CHALLENGE_TABLE, Item: c }));
+  },
+  async delete(id: string): Promise<void> {
+    await ddb.send(new DeleteCommand({ TableName: CHALLENGE_TABLE, Key: { channelIdentifier: id } }));
+  },
+};
+
+export const handler: Handler = async (event) => {
+  const action = event.action as 'issue' | 'verify';
+  const channel = event.channel as Channel;
+  const identifier = String(event.identifier ?? '');
+
+  if (!action || !channel || !identifier) {
+    return { statusCode: 400, error: 'action, channel, and identifier are required.' };
+  }
+
+  if (action === 'issue') {
+    const customerId = String(event.customerId ?? '');
+    if (!customerId) return { statusCode: 400, error: 'customerId is required to issue a challenge.' };
+
+    const { channelIdentifier, code, expiresAt } = await issueChallenge(challengeStore, channel, identifier, customerId);
+
+    // Deliver the code out-of-band on the SAME channel being verified.
+    const msg: OutboundMessage = {
+      type: 'text',
+      recipientId: channelIdentifier,
+      channel,
+      text: `Your verification code is ${code}. It expires in 10 minutes. Reply with this code to confirm your account.`,
+    };
+    await lambdaClient.send(
+      new InvokeCommand({ FunctionName: SENDER_FUNCTION, InvocationType: 'Event', Payload: Buffer.from(JSON.stringify(msg)) }),
+    );
+    console.log(JSON.stringify({ event: 'otp_issued', channelIdentifier, channel, expiresAt })); // no code
+    return { statusCode: 200, issued: true, channelIdentifier, expiresAt };
+  }
+
+  if (action === 'verify') {
+    const code = String(event.code ?? '');
+    const outcome = await verifyCode(challengeStore, identityStore, channel, identifier, code);
+    console.log(JSON.stringify({ event: 'otp_verify', channel, verified: outcome.verified, reason: 'reason' in outcome ? outcome.reason : undefined }));
+    return { statusCode: outcome.verified ? 200 : 401, ...outcome };
+  }
+
+  return { statusCode: 400, error: `Unknown action: ${action}` };
+};

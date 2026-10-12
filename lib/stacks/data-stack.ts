@@ -8,6 +8,7 @@ export class DataStack extends cdk.Stack {
   public readonly planTable: dynamodb.Table;
   public readonly identityTable: dynamodb.Table;
   public readonly decisionTable: dynamodb.Table;
+  public readonly challengeTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -93,7 +94,17 @@ export class DataStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // OTP verification challenges (TTL-expiring, single-use).
+    this.challengeTable = new dynamodb.Table(this, 'VerificationChallenges', {
+      tableName: 'ra-verification-challenges',
+      partitionKey: { name: 'channelIdentifier', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
     new cdk.CfnOutput(this, 'IdentityTableName', { value: this.identityTable.tableName });
     new cdk.CfnOutput(this, 'DecisionTableName', { value: this.decisionTable.tableName });
+    new cdk.CfnOutput(this, 'ChallengeTableName', { value: this.challengeTable.tableName });
   }
 }
