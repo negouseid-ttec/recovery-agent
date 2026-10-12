@@ -30,6 +30,8 @@ export function normalizeIdentifier(channel: Channel, raw: string): string {
 export interface IdentityStore {
   getLink(channelIdentifier: string): Promise<IdentityLink | undefined>;
   putLink(link: IdentityLink): Promise<void>;
+  /** True if the customer already owns at least one VERIFIED identifier. */
+  hasVerifiedForCustomer(customerId: string): Promise<boolean>;
 }
 
 /**
@@ -116,6 +118,12 @@ export class InMemoryIdentityStore implements IdentityStore {
   }
   async putLink(link: IdentityLink): Promise<void> {
     this.links.set(link.channelIdentifier, link);
+  }
+  async hasVerifiedForCustomer(customerId: string): Promise<boolean> {
+    for (const l of this.links.values()) {
+      if (l.customerId === customerId && l.verification === 'verified') return true;
+    }
+    return false;
   }
   /** Test/seed helper: pre-link a verified identifier. */
   seedVerified(channel: Channel, rawIdentifier: string, customerId: string, now = new Date()): void {

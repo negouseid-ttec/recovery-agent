@@ -84,7 +84,15 @@ async function checkBalance(input: Record<string, unknown>, conversation: Conver
     return { found: true, account: sanitizeAccount(acct) };
   }
 
-  const lookupId = recipientId ?? conversation.recipientId;
+  // Never trust a model-supplied recipientId for lookup: only honor it when it
+  // belongs to THIS conversation (its key or one of its verified channels).
+  // Otherwise fall back to the conversation's own identity — the model cannot
+  // pivot to another customer by passing a different recipientId.
+  const ownsRequested =
+    recipientId !== undefined &&
+    (recipientId === conversation.recipientId ||
+      (conversation.channels ?? []).some((c) => c.address === recipientId));
+  const lookupId = ownsRequested ? recipientId! : conversation.recipientId;
   const res = await ddb.send(
     new QueryCommand({
       TableName: ACCOUNT_TABLE,

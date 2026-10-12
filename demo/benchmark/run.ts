@@ -1,5 +1,13 @@
 /**
- * Phase 2 Benchmark Harness.
+ * Phase 2 Benchmark Harness — POLICY + HEURISTIC benchmark (NOT a live AI benchmark).
+ *
+ * SCOPE / HONESTY: this measures the DETERMINISTIC policy engine and the
+ * HEURISTIC recommender against labeled fixtures. It deliberately does NOT call
+ * Amazon Bedrock, so it does NOT establish real Nova/Bedrock recovery
+ * performance (recovery rate, dollars recovered, decision quality vs. a human).
+ * It proves safety/correctness invariants only. To benchmark the live model,
+ * pass a Bedrock-backed `recommender` AND evaluate against ground-truth outcomes
+ * on a replayed book — see the Phase 2 plan in the README.
  *
  * Evaluates the decision stack against a labeled fixture set WITHOUT any live
  * Bedrock call: it exercises the pure authorize() + heuristic path and the
@@ -127,6 +135,8 @@ export function runBenchmark(
 // CLI entry: `npx ts-node demo/benchmark/run.ts`
 if (require.main === module) {
   const m = runBenchmark();
+  // eslint-disable-next-line no-console
+  console.log('[scope] policy + heuristic benchmark — NOT a live Bedrock recovery benchmark.');
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(m, null, 2));
 }

@@ -15,7 +15,7 @@ Legend: ✅ done · ⚠️ ready, action pending · ❌ not started / blocking
 | Entrant is an APN-registered partner / authorized individual | ⚠️ | Confirm TTEC APN registration + corporate email on the APN domain used at Devpost registration |
 | Project reasonably fits the theme | ✅ | Agentic AI on AWS for a real telecom revenue-recovery use case |
 | Uses ≥1 qualifying AWS CDS service at runtime (imported **and** called) | ✅ | See §3 |
-| **ACE opportunity ID** submitted (net-new, created ≥ 9/14/2026, campaign-coded) | ❌ | **Eligibility gate.** Colleague filing. See §5 |
+| **ACE opportunity ID** submitted (net-new, created ≥ 9/14/2026, campaign-coded) | ✅ | **`O29439654`** filed 2026-10-08. Paste into Devpost submission form. See §5 |
 
 ## 2. Project requirements
 
@@ -90,7 +90,7 @@ https://github.com/aws-cds-partner/aws-cds-agentic-ai-partner-hackathon-private/
 ## Open blockers (do these to submit)
 
 1. ❌ **Record + upload the ~3-min demo video** to YouTube/Vimeo (public). Script + Word doc ready. — *you*
-2. ❌ **File the ACE opportunity**, get the `OXXXXXXXX` ID. — *colleague (today)*
+2. ✅ **ACE opportunity filed** — ID `O29439654` (2026-10-08). Still must be pasted into the Devpost submission form.
 3. ⚠️ **Make the repo reachable** — flip public or share the two judging emails. — *you*
 4. ⚠️ **Re-upload the story UI to CloudFront** (§6). — *you*
 5. ⚠️ **Confirm APN registration / corporate email** matches at Devpost registration. — *you*

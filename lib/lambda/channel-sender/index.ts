@@ -30,23 +30,40 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
 
 /**
  * FINAL policy gate — the last line of defense before anything leaves AWS.
- * EVERY outbound (proactive outreach, conversational replies, async retries,
- * OTP) funnels through this sender, so enforcing policy HERE guarantees no
- * message is dispatched for an opted-out / held / restricted / out-of-window
- * account, regardless of what upstream (incl. Bedrock) decided.
+ * EVERY outbound funnels through this sender, so enforcing policy HERE
+ * guarantees no collection message is dispatched for an opted-out / held /
+ * restricted / out-of-window account, regardless of upstream (incl. Bedrock).
  *
- * `bypassPolicy` is reserved for transactional system messages that are not
- * collection outreach (e.g. an OTP the customer themselves requested); callers
- * must set it explicitly and it is logged.
+ * FAIL-CLOSED for collection messages: if the account can't be resolved (lookup
+ * error OR no matching account), the message is SUPPRESSED — we never "fail
+ * open" and send a collection message we couldn't policy-check.
+ *
+ * `bypassPolicy: true` marks a non-collection transactional message (e.g. a
+ * customer-requested OTP) that is intentionally exempt; it is logged.
  */
 async function policyGate(message: OutboundMessage & { channel?: Channel; bypassPolicy?: boolean }): Promise<{ ok: true } | { ok: false; reasonCode: string }> {
   if ((message as { bypassPolicy?: boolean }).bypassPolicy) {
     console.log(JSON.stringify({ event: 'sender_policy_bypass', recipientId: message.recipientId }));
     return { ok: true };
   }
-  if (!ACCOUNT_TABLE) return { ok: true }; // no account table wired → nothing to enforce against
-  const account = await lookupAccount(message.recipientId);
-  if (!account) return { ok: true }; // unknown recipient (e.g. new inbound) — nothing to gate on
+  if (!ACCOUNT_TABLE) {
+    // No account table wired at all → misconfiguration. Fail closed.
+    console.error('[sender] ACCOUNT_TABLE not configured — suppressing collection message (fail-closed).');
+    return { ok: false, reasonCode: 'POLICY_UNAVAILABLE' };
+  }
+  let account: Account | undefined;
+  try {
+    account = await lookupAccount(message.recipientId);
+  } catch (err) {
+    console.error('[sender] account lookup failed — suppressing (fail-closed):', (err as Error).message);
+    return { ok: false, reasonCode: 'POLICY_LOOKUP_FAILED' };
+  }
+  if (!account) {
+    // No account for this recipient. A collection message MUST have a clean,
+    // policy-checkable account; suppress rather than send unverified.
+    console.warn(JSON.stringify({ event: 'sender_blocked_no_account', recipientId: message.recipientId }));
+    return { ok: false, reasonCode: 'NO_ACCOUNT' };
+  }
   const decision = evaluateOutbound(account, { channel: (message as { channel?: Channel }).channel });
   if (!decision.allowed) {
     console.log(JSON.stringify({ event: 'sender_blocked', recipientId: message.recipientId, reasonCode: decision.reasonCode }));
@@ -56,24 +73,16 @@ async function policyGate(message: OutboundMessage & { channel?: Channel; bypass
 }
 
 async function lookupAccount(recipientId: string): Promise<Account | undefined> {
-  try {
-    const res = await ddb.send(
-      new QueryCommand({
-        TableName: ACCOUNT_TABLE,
-        IndexName: 'by-recipient',
-        KeyConditionExpression: 'recipientId = :r',
-        ExpressionAttributeValues: { ':r': recipientId },
-        Limit: 1,
-      }),
-    );
-    return res.Items?.[0] as Account | undefined;
-  } catch (err) {
-    // Fail CLOSED on infra error for safety? No — a lookup failure must not
-    // silently suppress legitimate mail. Log and allow; the orchestrator/
-    // outreach layers already gated. The sender gate is defense-in-depth.
-    console.warn('[sender] account lookup failed; proceeding (upstream already gated):', (err as Error).message);
-    return undefined;
-  }
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: ACCOUNT_TABLE,
+      IndexName: 'by-recipient',
+      KeyConditionExpression: 'recipientId = :r',
+      ExpressionAttributeValues: { ':r': recipientId },
+      Limit: 1,
+    }),
+  );
+  return res.Items?.[0] as Account | undefined;
 }
 
 export const handler: Handler = async (event) => {

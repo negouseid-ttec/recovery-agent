@@ -13,10 +13,10 @@
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { Handler } from 'aws-lambda';
-import type { Channel, IdentityLink, VerificationChallenge, OutboundMessage } from '../../shared/types';
+import type { Channel, IdentityLink, VerificationChallenge } from '../../shared/types';
 import { issueChallenge, verifyCode, type ChallengeStore } from '../../shared/identity-verification';
 import type { IdentityStore } from '../../shared/identity';
 
@@ -34,6 +34,13 @@ const identityStore: IdentityStore = {
   },
   async putLink(link: IdentityLink): Promise<void> {
     await ddb.send(new PutCommand({ TableName: IDENTITY_TABLE, Item: link }));
+  },
+  async hasVerifiedForCustomer(customerId: string): Promise<boolean> {
+    const r = await ddb.send(new QueryCommand({
+      TableName: IDENTITY_TABLE, IndexName: 'by-customer',
+      KeyConditionExpression: 'customerId = :c', ExpressionAttributeValues: { ':c': customerId },
+    }));
+    return (r.Items ?? []).some((i) => (i as IdentityLink).verification === 'verified');
   },
 };
 
@@ -62,8 +69,15 @@ export const handler: Handler = async (event) => {
   if (action === 'issue') {
     const customerId = String(event.customerId ?? '');
     if (!customerId) return { statusCode: 400, error: 'customerId is required to issue a challenge.' };
+    const provenChannelIdentifier = event.provenChannelIdentifier ? String(event.provenChannelIdentifier) : undefined;
 
-    const { channelIdentifier, code, expiresAt } = await issueChallenge(challengeStore, channel, identifier, customerId);
+    const result = await issueChallenge(challengeStore, identityStore, channel, identifier, customerId, provenChannelIdentifier);
+    if (!result.issued) {
+      console.log(JSON.stringify({ event: 'otp_issue_denied', channel, reason: result.reason }));
+      return { statusCode: 403, issued: false, reason: result.reason,
+        error: 'Not authorized to link this identifier to an existing customer without proof of control (provenChannelIdentifier).' };
+    }
+    const { channelIdentifier, code, expiresAt } = result;
 
     // Deliver the code out-of-band on the SAME channel being verified.
     const msg = {

@@ -38,20 +38,47 @@ export function generateCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
+export type IssueOutcome =
+  | { issued: true; channelIdentifier: string; code: string; expiresAt: string }
+  | { issued: false; reason: 'not_authorized_for_customer' };
+
 /**
- * Issue a verification challenge for a channel identifier that the caller wants
- * to link to `customerId`. Returns the code so the Lambda can dispatch it via
- * the channel sender (the code itself is never logged).
+ * Issue a verification challenge for a channel identifier the caller wants to
+ * link to `customerId`.
+ *
+ * AUTHORIZATION (anti-account-takeover): a caller cannot bind an identifier to
+ * an EXISTING customer that already owns verified identifiers unless they prove
+ * control of that customer by supplying `provenChannelIdentifier` — an
+ * identifier ALREADY verified-linked to the same customerId. Issuing for a
+ * brand-new/unclaimed customerId (self-service first verification) is allowed.
+ *
+ * This prevents a request with an attacker-chosen customerId from starting a
+ * challenge that would attach a channel to someone else's account.
  */
 export async function issueChallenge(
-  store: ChallengeStore,
+  challengeStore: ChallengeStore,
+  identityStore: IdentityStore,
   channel: Channel,
   rawIdentifier: string,
   customerId: string,
+  provenChannelIdentifier?: string,
   now: Date = new Date(),
   codeOverride?: string, // tests inject a known code
-): Promise<{ channelIdentifier: string; code: string; expiresAt: string }> {
+): Promise<IssueOutcome> {
   const channelIdentifier = normalizeIdentifier(channel, rawIdentifier);
+
+  // Does this customer already have ANY verified identifier?
+  const customerClaimed = await identityStore.hasVerifiedForCustomer(customerId);
+  if (customerClaimed) {
+    // Must prove control of the existing customer.
+    if (!provenChannelIdentifier) return { issued: false, reason: 'not_authorized_for_customer' };
+    const proof = await identityStore.getLink(provenChannelIdentifier.trim().toLowerCase());
+    const proofRaw = proof ?? (await identityStore.getLink(provenChannelIdentifier.trim()));
+    if (!proofRaw || proofRaw.verification !== 'verified' || proofRaw.customerId !== customerId) {
+      return { issued: false, reason: 'not_authorized_for_customer' };
+    }
+  }
+
   const code = codeOverride ?? generateCode();
   const challenge: VerificationChallenge = {
     channelIdentifier,
@@ -63,8 +90,8 @@ export async function issueChallenge(
     expiresAt: new Date(now.getTime() + CODE_TTL_MS).toISOString(),
     ttl: Math.floor((now.getTime() + CODE_TTL_MS) / 1000),
   };
-  await store.put(challenge);
-  return { channelIdentifier, code, expiresAt: challenge.expiresAt };
+  await challengeStore.put(challenge);
+  return { issued: true, channelIdentifier, code, expiresAt: challenge.expiresAt };
 }
 
 export type VerifyOutcome =

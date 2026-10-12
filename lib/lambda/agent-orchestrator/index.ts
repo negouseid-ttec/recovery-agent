@@ -47,6 +47,14 @@ const identityStore: IdentityStore = {
     if (!IDENTITY_TABLE) return;
     await ddb.send(new PutCommand({ TableName: IDENTITY_TABLE, Item: link }));
   },
+  async hasVerifiedForCustomer(customerId: string): Promise<boolean> {
+    if (!IDENTITY_TABLE) return false;
+    const r = await ddb.send(new QueryCommand({
+      TableName: IDENTITY_TABLE, IndexName: 'by-customer',
+      KeyConditionExpression: 'customerId = :c', ExpressionAttributeValues: { ':c': customerId },
+    }));
+    return (r.Items ?? []).some((i) => (i as IdentityLink).verification === 'verified');
+  },
 };
 
 export const handler: Handler = async (event) => {
