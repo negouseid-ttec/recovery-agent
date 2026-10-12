@@ -24,7 +24,7 @@ import { evaluateOutbound } from '../../shared/recovery-policy';
 import { recommendAndAuthorize } from '../next-best-action';
 import { recordDecision, type DecisionSink } from '../../shared/decision-audit';
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } });
 const lambdaClient = new LambdaClient({});
 
 const ACCOUNT_TABLE = process.env.ACCOUNT_TABLE!;

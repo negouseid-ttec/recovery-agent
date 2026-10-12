@@ -20,7 +20,7 @@ import type { Channel, IdentityLink, VerificationChallenge, OutboundMessage } fr
 import { issueChallenge, verifyCode, type ChallengeStore } from '../../shared/identity-verification';
 import type { IdentityStore } from '../../shared/identity';
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } });
 const lambdaClient = new LambdaClient({});
 
 const IDENTITY_TABLE = process.env.IDENTITY_TABLE!;

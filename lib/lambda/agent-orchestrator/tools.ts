@@ -9,7 +9,7 @@ import { v4 as uuid } from 'uuid';
 import type { Conversation, Account, PaymentPlan, Promise as PromiseRecord, Dispute } from '../../shared/types';
 import { evaluatePaymentPlan, evaluateAmount } from '../../shared/recovery-policy';
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } });
 const lambdaClient = new LambdaClient({});
 
 const ACCOUNT_TABLE = process.env.ACCOUNT_TABLE!;

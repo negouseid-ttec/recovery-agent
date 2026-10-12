@@ -25,7 +25,7 @@ import { executeToolCall } from './tools';
 import { resolveIdentity, type IdentityStore } from '../../shared/identity';
 
 const bedrock = new BedrockRuntimeClient({});
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } });
 const lambdaClient = new LambdaClient({});
 
 const CONVERSATION_TABLE = process.env.CONVERSATION_TABLE!;
