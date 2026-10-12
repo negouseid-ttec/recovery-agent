@@ -93,6 +93,7 @@ export class AgentStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       environment: {
         CONVERSATION_TABLE: props.conversationTable.tableName,
+        ACCOUNT_TABLE: props.accountTable.tableName,
         SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? 'recovery@example.com',
         EUM_PHONE_POOL_ID: process.env.EUM_PHONE_POOL_ID ?? '',
         RCS_AGENT_ID: process.env.RCS_AGENT_ID ?? '',
@@ -117,6 +118,7 @@ export class AgentStack extends cdk.Stack {
       new iam.PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
     );
     props.conversationTable.grantReadData(this.senderFunction);
+    props.accountTable.grantReadData(this.senderFunction);
     this.senderFunction.grantInvoke(this.orchestratorFunction);
 
     // ── Proactive Outreach (escalation-ladder driver) ─────────────────────

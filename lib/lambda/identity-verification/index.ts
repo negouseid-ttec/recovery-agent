@@ -66,11 +66,12 @@ export const handler: Handler = async (event) => {
     const { channelIdentifier, code, expiresAt } = await issueChallenge(challengeStore, channel, identifier, customerId);
 
     // Deliver the code out-of-band on the SAME channel being verified.
-    const msg: OutboundMessage = {
-      type: 'text',
+    const msg = {
+      type: 'text' as const,
       recipientId: channelIdentifier,
       channel,
       text: `Your verification code is ${code}. It expires in 10 minutes. Reply with this code to confirm your account.`,
+      bypassPolicy: true, // customer-requested transactional OTP, not collection outreach
     };
     await lambdaClient.send(
       new InvokeCommand({ FunctionName: SENDER_FUNCTION, InvocationType: 'Event', Payload: Buffer.from(JSON.stringify(msg)) }),

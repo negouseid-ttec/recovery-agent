@@ -76,7 +76,12 @@ async function checkBalance(input: Record<string, unknown>, conversation: Conver
   if (accountId) {
     const res = await ddb.send(new GetCommand({ TableName: ACCOUNT_TABLE, Key: { accountId } }));
     if (!res.Item) return { found: false, message: `No account ${accountId}.` };
-    return { found: true, account: sanitizeAccount(res.Item as Account) };
+    const acct = res.Item as Account;
+    // Ownership: never return another customer's account by raw accountId.
+    if (!accountOwnedBy(acct, conversation)) {
+      return { found: false, message: 'Not authorized: that account does not belong to this customer.' };
+    }
+    return { found: true, account: sanitizeAccount(acct) };
   }
 
   const lookupId = recipientId ?? conversation.recipientId;
