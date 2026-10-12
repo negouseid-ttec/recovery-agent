@@ -21,6 +21,7 @@ const agent = new AgentStack(app, 'RecoveryAgent-Agent', {
   planTable: data.planTable,
   identityTable: data.identityTable,
   decisionTable: data.decisionTable,
+  challengeTable: data.challengeTable,
 });
 
 new MessagingStack(app, 'RecoveryAgent-Messaging', {

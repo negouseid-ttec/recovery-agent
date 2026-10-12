@@ -12,6 +12,7 @@ export interface AgentStackProps extends cdk.StackProps {
   planTable: dynamodb.Table;
   identityTable: dynamodb.Table;
   decisionTable: dynamodb.Table;
+  challengeTable: dynamodb.Table;
 }
 
 export class AgentStack extends cdk.Stack {
@@ -153,8 +154,31 @@ export class AgentStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'OrchestratorArn', { value: this.orchestratorFunction.functionArn });
+
+    // ── Identity Verification (OTP issue/verify) ───────────────────────────
+    const verifyFn = new nodejs.NodejsFunction(this, 'IdentityVerification', {
+      functionName: 'ra-identity-verification',
+      entry: path.join(lambdaDir, 'identity-verification', 'index.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: cdk.Duration.seconds(15),
+      environment: {
+        IDENTITY_TABLE: props.identityTable.tableName,
+        CHALLENGE_TABLE: props.challengeTable.tableName,
+        SENDER_FUNCTION_NAME: this.senderFunction.functionName,
+        NODE_OPTIONS: '--enable-source-maps',
+      },
+      bundling,
+    });
+    props.identityTable.grantReadWriteData(verifyFn);
+    props.challengeTable.grantReadWriteData(verifyFn);
+    this.senderFunction.grantInvoke(verifyFn);
+
     new cdk.CfnOutput(this, 'TriageArn', { value: this.triageFunction.functionArn });
     new cdk.CfnOutput(this, 'SenderArn', { value: this.senderFunction.functionArn });
     new cdk.CfnOutput(this, 'OutreachArn', { value: outreachFn.functionArn });
+    new cdk.CfnOutput(this, 'VerificationArn', { value: verifyFn.functionArn });
   }
 }
