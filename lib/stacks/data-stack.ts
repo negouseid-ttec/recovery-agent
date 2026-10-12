@@ -27,6 +27,13 @@ export class DataStack extends cdk.Stack {
       partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+    // Canonical cross-channel identity — load one thread per verified customer.
+    this.conversationTable.addGlobalSecondaryIndex({
+      indexName: 'by-customer',
+      partitionKey: { name: 'customerId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'updatedAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
 
     // Accounts — the past-due book
     this.accountTable = new dynamodb.Table(this, 'Accounts', {

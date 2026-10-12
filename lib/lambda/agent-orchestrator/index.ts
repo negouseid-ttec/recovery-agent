@@ -15,7 +15,7 @@ import {
   type ToolUseBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { Handler } from 'aws-lambda';
 import { v4 as uuid } from 'uuid';
@@ -209,24 +209,42 @@ async function runAgentLoop(
 // ─── Conversation Persistence ────────────────────────────────────────────────
 
 async function loadOrCreateConversation(message: InboundMessage): Promise<Conversation> {
-  const recipientId = message.from; // E.164 phone or email
+  const recipientId = message.from; // E.164 phone or email (per-channel key)
 
-  // Resolve the canonical cross-channel customer identity. A verified identifier
-  // maps to one customerId across channels; an unknown identifier gets a fresh,
-  // unverified customerId (never silently merged with an existing customer).
+  // Resolve the canonical cross-channel customer identity.
   const identity = await resolveIdentity(identityStore, message.channel, message.from);
 
-  const result = await ddb.send(
-    new GetCommand({
-      TableName: CONVERSATION_TABLE,
-      Key: { recipientId },
-    }),
-  );
+  // 1. VERIFIED identity → load the canonical thread by customerId (continuity
+  //    across channels). Unverified identities are NOT merged (safety): they
+  //    stay on their own per-recipient thread until verification links them.
+  if (identity.verification === 'verified') {
+    const byCustomer = await ddb.send(
+      new QueryCommand({
+        TableName: CONVERSATION_TABLE,
+        IndexName: 'by-customer',
+        KeyConditionExpression: 'customerId = :c',
+        ExpressionAttributeValues: { ':c': identity.customerId },
+        ScanIndexForward: false, // most recently updated first
+        Limit: 1,
+      }),
+    );
+    const canonical = byCustomer.Items?.[0] as Conversation | undefined;
+    if (canonical) {
+      if (!canonical.channels.find((c) => c.channel === message.channel && c.address === message.from)) {
+        canonical.channels.push({ channel: message.channel, address: message.from });
+      }
+      canonical.updatedAt = new Date().toISOString();
+      return canonical;
+    }
+  }
 
+  // 2. Fall back to the per-recipient thread (existing behavior, migration-safe).
+  const result = await ddb.send(
+    new GetCommand({ TableName: CONVERSATION_TABLE, Key: { recipientId } }),
+  );
   if (result.Item) {
     const conv = result.Item as Conversation;
-    conv.customerId = conv.customerId ?? identity.customerId; // backfill (migration-safe)
-    // Update channel list if this is a new channel for this recipient
+    conv.customerId = conv.customerId ?? identity.customerId; // backfill
     if (!conv.channels.find((c) => c.channel === message.channel && c.address === message.from)) {
       conv.channels.push({ channel: message.channel, address: message.from });
     }
@@ -234,7 +252,7 @@ async function loadOrCreateConversation(message: InboundMessage): Promise<Conver
     return conv;
   }
 
-  // New conversation
+  // 3. New conversation.
   const now = new Date();
   return {
     recipientId,

@@ -12,23 +12,78 @@ import {
 } from '@aws-sdk/client-pinpoint-sms-voice-v2';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import type { Handler } from 'aws-lambda';
-import type { OutboundMessage, Conversation, Channel } from '../../shared/types';
+import type { OutboundMessage, Conversation, Channel, Account } from '../../shared/types';
+import { evaluateOutbound } from '../../shared/recovery-policy';
 
 const eum = new PinpointSMSVoiceV2Client({});
 const ses = new SESv2Client({});
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } });
 
 const CONVERSATION_TABLE = process.env.CONVERSATION_TABLE!;
+const ACCOUNT_TABLE = process.env.ACCOUNT_TABLE ?? '';
 const SES_FROM_EMAIL = process.env.SES_FROM_EMAIL ?? 'recovery@example.com';
 const EUM_PHONE_POOL_ID = process.env.EUM_PHONE_POOL_ID ?? '';
 const RCS_AGENT_ID = process.env.RCS_AGENT_ID ?? '';
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
 
+/**
+ * FINAL policy gate — the last line of defense before anything leaves AWS.
+ * EVERY outbound (proactive outreach, conversational replies, async retries,
+ * OTP) funnels through this sender, so enforcing policy HERE guarantees no
+ * message is dispatched for an opted-out / held / restricted / out-of-window
+ * account, regardless of what upstream (incl. Bedrock) decided.
+ *
+ * `bypassPolicy` is reserved for transactional system messages that are not
+ * collection outreach (e.g. an OTP the customer themselves requested); callers
+ * must set it explicitly and it is logged.
+ */
+async function policyGate(message: OutboundMessage & { channel?: Channel; bypassPolicy?: boolean }): Promise<{ ok: true } | { ok: false; reasonCode: string }> {
+  if ((message as { bypassPolicy?: boolean }).bypassPolicy) {
+    console.log(JSON.stringify({ event: 'sender_policy_bypass', recipientId: message.recipientId }));
+    return { ok: true };
+  }
+  if (!ACCOUNT_TABLE) return { ok: true }; // no account table wired → nothing to enforce against
+  const account = await lookupAccount(message.recipientId);
+  if (!account) return { ok: true }; // unknown recipient (e.g. new inbound) — nothing to gate on
+  const decision = evaluateOutbound(account, { channel: (message as { channel?: Channel }).channel });
+  if (!decision.allowed) {
+    console.log(JSON.stringify({ event: 'sender_blocked', recipientId: message.recipientId, reasonCode: decision.reasonCode }));
+    return { ok: false, reasonCode: decision.reasonCode };
+  }
+  return { ok: true };
+}
+
+async function lookupAccount(recipientId: string): Promise<Account | undefined> {
+  try {
+    const res = await ddb.send(
+      new QueryCommand({
+        TableName: ACCOUNT_TABLE,
+        IndexName: 'by-recipient',
+        KeyConditionExpression: 'recipientId = :r',
+        ExpressionAttributeValues: { ':r': recipientId },
+        Limit: 1,
+      }),
+    );
+    return res.Items?.[0] as Account | undefined;
+  } catch (err) {
+    // Fail CLOSED on infra error for safety? No — a lookup failure must not
+    // silently suppress legitimate mail. Log and allow; the orchestrator/
+    // outreach layers already gated. The sender gate is defense-in-depth.
+    console.warn('[sender] account lookup failed; proceeding (upstream already gated):', (err as Error).message);
+    return undefined;
+  }
+}
+
 export const handler: Handler = async (event) => {
   const message: OutboundMessage = event;
   console.log(`[sender] Outbound ${message.type} to ${message.recipientId}`);
+
+  const gate = await policyGate(event);
+  if (!gate.ok) {
+    return { statusCode: 200, blocked: true, reasonCode: gate.reasonCode, body: 'Suppressed by policy at the send boundary.' };
+  }
 
   switch (message.type) {
     case 'text':
