@@ -10,6 +10,8 @@ export interface AgentStackProps extends cdk.StackProps {
   conversationTable: dynamodb.Table;
   accountTable: dynamodb.Table;
   planTable: dynamodb.Table;
+  identityTable: dynamodb.Table;
+  decisionTable: dynamodb.Table;
 }
 
 export class AgentStack extends cdk.Stack {
@@ -37,6 +39,7 @@ export class AgentStack extends cdk.Stack {
         CONVERSATION_TABLE: props.conversationTable.tableName,
         ACCOUNT_TABLE: props.accountTable.tableName,
         PLAN_TABLE: props.planTable.tableName,
+        IDENTITY_TABLE: props.identityTable.tableName,
         BEDROCK_MODEL_ID: MODEL,
         SENDER_FUNCTION_NAME: 'ra-channel-sender',
         NODE_OPTIONS: '--enable-source-maps',
@@ -52,6 +55,7 @@ export class AgentStack extends cdk.Stack {
     props.conversationTable.grantReadWriteData(this.orchestratorFunction);
     props.accountTable.grantReadWriteData(this.orchestratorFunction);
     props.planTable.grantReadWriteData(this.orchestratorFunction);
+    props.identityTable.grantReadWriteData(this.orchestratorFunction);
 
     // ── Message Triage (inbound intelligence) ──────────────────────────────
     this.triageFunction = new nodejs.NodejsFunction(this, 'MessageTriage', {
@@ -125,12 +129,21 @@ export class AgentStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(120),
       environment: {
         ACCOUNT_TABLE: props.accountTable.tableName,
+        DECISION_TABLE: props.decisionTable.tableName,
+        BEDROCK_MODEL_ID: MODEL,
         SENDER_FUNCTION_NAME: this.senderFunction.functionName,
         NODE_OPTIONS: '--enable-source-maps',
       },
       bundling,
     });
     props.accountTable.grantReadWriteData(outreachFn);
+    props.decisionTable.grantWriteData(outreachFn);
+    outreachFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+        resources: ['*'],
+      }),
+    );
     this.senderFunction.grantInvoke(outreachFn);
 
     // Run the escalation ladder once a day (customers who stay silent escalate).

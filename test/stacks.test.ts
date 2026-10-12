@@ -12,17 +12,28 @@ describe('Recovery Agent infrastructure', () => {
     conversationTable: data.conversationTable,
     accountTable: data.accountTable,
     planTable: data.planTable,
+    identityTable: data.identityTable,
+    decisionTable: data.decisionTable,
   });
 
-  test('Data stack creates 3 DynamoDB tables', () => {
-    Template.fromStack(data).resourceCountIs('AWS::DynamoDB::Table', 3);
+  test('Data stack creates 5 DynamoDB tables', () => {
+    Template.fromStack(data).resourceCountIs('AWS::DynamoDB::Table', 5);
   });
 
-  test('Accounts table has by-recipient GSI', () => {
+  test('Accounts table has by-recipient and by-status GSIs', () => {
     Template.fromStack(data).hasResourceProperties('AWS::DynamoDB::Table', {
       TableName: 'ra-accounts',
-      GlobalSecondaryIndexes: [{ IndexName: 'by-recipient', KeySchema: [{ AttributeName: 'recipientId', KeyType: 'HASH' }] }],
+      GlobalSecondaryIndexes: Match.arrayWith([
+        Match.objectLike({ IndexName: 'by-recipient' }),
+        Match.objectLike({ IndexName: 'by-status' }),
+      ]),
     });
+  });
+
+  test('Identity and decision tables exist', () => {
+    const t = Template.fromStack(data);
+    t.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'ra-identity-links' });
+    t.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'ra-decision-log' });
   });
 
   test('Agent stack creates orchestrator, triage, sender, and outreach Lambdas', () => {

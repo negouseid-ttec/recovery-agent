@@ -1,95 +1,194 @@
 /**
- * Proactive Outreach — the escalation-ladder driver.
+ * Proactive Outreach — the autonomous recovery driver.
  *
- * Runs on a schedule (EventBridge) or on demand. For each past-due account that
- * still hasn't engaged, it asks the channel-strategy which channel to use for
- * the NEXT attempt (cheapest-that-works, escalate on silence, honor opt-outs and
- * quiet hours), records the attempt, and dispatches via the channel sender.
+ * For each eligible (past-due) account:
+ *   1. Load the account via an INDEXED query on status (no unbounded scan).
+ *   2. Evaluate deterministic policy (opt-out / holds / quiet hours / caps).
+ *   3. If permitted, request a next-best-action recommendation (AI recommends).
+ *   4. Re-evaluate policy immediately before send (authorize()).
+ *   5. Dispatch via the existing channel sender — with idempotency so retries /
+ *      overlapping invocations don't double-send.
+ *   6. Persist the attempt and an auditable decision record; schedule next review.
  *
- * This is what makes the four channels a STRATEGY: the agent reaches the
- * customer on the cheapest channel that can work and only escalates to a richer,
- * pricier channel when there's been no response — stopping the instant the
- * customer engages anywhere.
+ * The AI never overrides policy: a denial downgrades the executed action to
+ * wait/hold/escalate regardless of the recommendation.
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, UpdateCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { Handler } from 'aws-lambda';
-import type { Account, OutboundMessage } from '../../shared/types';
-import { selectOutreachChannel, type AccountSignals } from '../../shared/channel-strategy';
+import { v4 as uuid } from 'uuid';
+import type { Account, OutboundMessage, DecisionLogEntry } from '../../shared/types';
+import { evaluateOutbound } from '../../shared/recovery-policy';
+import { recommendAndAuthorize } from '../next-best-action';
+import { recordDecision, type DecisionSink } from '../../shared/decision-audit';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const lambdaClient = new LambdaClient({});
 
 const ACCOUNT_TABLE = process.env.ACCOUNT_TABLE!;
+const DECISION_TABLE = process.env.DECISION_TABLE ?? '';
 const SENDER_FUNCTION = process.env.SENDER_FUNCTION_NAME ?? 'ra-channel-sender';
+const BATCH_LIMIT = Number(process.env.OUTREACH_BATCH_LIMIT ?? 25);
 
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
 
+/** DynamoDB-backed decision sink. */
+const decisionSink: DecisionSink = {
+  async put(entry: DecisionLogEntry): Promise<void> {
+    if (!DECISION_TABLE) return; // audit table optional in minimal deploys
+    await ddb.send(new PutCommand({ TableName: DECISION_TABLE, Item: entry }));
+  },
+};
+
 export const handler: Handler = async (event) => {
-  // Scan past-due accounts that haven't been resolved yet.
+  const now = new Date();
+  const correlationId = event.correlationId ?? `OUT-${uuid()}`;
+
+  // 1. INDEXED query on status — no unbounded Scan. Requires the by-status GSI.
   const res = await ddb.send(
-    new ScanCommand({
+    new QueryCommand({
       TableName: ACCOUNT_TABLE,
-      FilterExpression: '#s = :pd',
+      IndexName: 'by-status',
+      KeyConditionExpression: '#s = :pd',
       ExpressionAttributeNames: { '#s': 'status' },
       ExpressionAttributeValues: { ':pd': 'past_due' },
+      Limit: BATCH_LIMIT,
     }),
   );
   const accounts = (res.Items ?? []) as Account[];
-  const decisions: unknown[] = [];
+  const results: unknown[] = [];
 
   for (const a of accounts) {
-    const signals: AccountSignals = {
-      lastResponseChannel: (a as any).lastResponseChannel,
-      optedOutChannels: (a as any).optedOutChannels ?? [],
-      rcsCapable: (a as any).rcsCapable,
-      whatsappReachable: (a as any).whatsappReachable,
-      pastDueCents: a.pastDueCents,
-      daysPastDue: a.daysPastDue,
-      attemptsWithoutResponse: (a as any).attemptsWithoutResponse ?? 0,
-      localHour: event.localHour ?? new Date().getUTCHours(),
-    };
+    try {
+      results.push(await processAccount(a, correlationId, now, event.localHourOverride));
+    } catch (err) {
+      console.error(`[outreach] error processing ${a.accountId}:`, (err as Error).message);
+      results.push({ accountId: a.accountId, executionResult: 'error', error: (err as Error).message });
+    }
+  }
 
-    const decision = selectOutreachChannel(signals);
-    console.log(`[outreach] ${a.accountId} → ${decision.channel} (step ${decision.ladderStep}, ~$${decision.estCostUsd}) — ${decision.reason}`);
-    decisions.push({ accountId: a.accountId, ...decision });
+  return { scanned: accounts.length, correlationId, results };
+};
 
-    if (decision.hold) continue; // quiet hours / nothing to send now
+async function processAccount(
+  a: Account,
+  correlationId: string,
+  now: Date,
+  localHourOverride?: number,
+): Promise<unknown> {
+  const ctx = { now, maxContactsPerWindow: 3 };
 
-    const msg: OutboundMessage = {
-      type: 'text',
-      recipientId: a.recipientId,
-      channel: decision.channel,
-      text:
-        `Hi ${a.customerName}, this is your telecom. Your account has a past-due ` +
-        `balance of ${dollars(a.pastDueCents)}${a.suspensionDate ? ` and service may pause ${a.suspensionDate}` : ''}. ` +
-        `Reply HELP and I'll make it easy to sort out — pay in full or split into smaller payments.`,
-    };
+  // 2. Pre-check policy (fast reject before spending a model call).
+  const pre = evaluateOutbound(a, ctx);
+  if (!pre.allowed) {
+    const entry = await recordDecision(decisionSink, {
+      correlationId,
+      customerId: a.customerId,
+      accountId: a.accountId,
+      signals: { status: a.status, daysPastDue: a.daysPastDue, pastDueCents: a.pastDueCents },
+      policyDecision: pre,
+      executedAction: 'skip',
+      executionResult: 'blocked',
+      summary: `Blocked before outreach: ${pre.reasonCode}`,
+    }, now);
+    return { accountId: a.accountId, executionResult: 'blocked', policy: pre.reasonCode, decisionId: entry.decisionId };
+  }
 
-    await lambdaClient.send(
-      new InvokeCommand({
-        FunctionName: SENDER_FUNCTION,
-        InvocationType: 'Event',
-        Payload: Buffer.from(JSON.stringify(msg)),
-      }),
-    );
+  // 3. AI recommends; 4. authorize() re-evaluates policy as the final gate.
+  const authorized = await recommendAndAuthorize(a, ctx);
+  const { recommendation, policyDecision, executed, source, modelId, tokenUsage } = authorized;
 
-    // Record the attempt so the next run escalates if still no response.
+  // 5. Only dispatch when the executed action is a real outbound contact.
+  let executionResult: DecisionLogEntry['executionResult'] = 'skipped';
+  if (executed === 'contact' && recommendation.channel !== 'none' && policyDecision.allowed) {
+    // Idempotency: guard against duplicate sends from retries/overlap using a
+    // conditional update keyed on a per-day outreach marker.
+    const dayKey = now.toISOString().slice(0, 10);
+    const sent = await claimOutreachSlot(a.accountId, dayKey);
+    if (!sent) {
+      executionResult = 'skipped';
+    } else {
+      const msg: OutboundMessage = {
+        type: 'text',
+        recipientId: a.recipientId,
+        channel: recommendation.channel,
+        text:
+          `Hi ${a.customerName}, this is your telecom. Your account has a past-due balance of ` +
+          `${dollars(a.pastDueCents)}${a.suspensionDate ? ` and service may pause ${a.suspensionDate}` : ''}. ` +
+          `Reply HELP and I'll make it easy — pay in full or split into smaller payments.`,
+      };
+      await lambdaClient.send(
+        new InvokeCommand({ FunctionName: SENDER_FUNCTION, InvocationType: 'Event', Payload: Buffer.from(JSON.stringify(msg)) }),
+      );
+      await recordAttempt(a, recommendation.channel, now);
+      executionResult = 'dispatched';
+    }
+  }
+
+  const entry = await recordDecision(decisionSink, {
+    correlationId,
+    customerId: a.customerId,
+    accountId: a.accountId,
+    signals: { status: a.status, daysPastDue: a.daysPastDue, pastDueCents: a.pastDueCents, attempts: a.attemptsWithoutResponse ?? 0 },
+    recommendation,
+    policyDecision,
+    executedAction: executed,
+    executionResult,
+    estCostUsd: recommendation.expectedCostUsd,
+    modelId,
+    tokenUsage,
+    summary: `${source}: recommend ${recommendation.action}/${recommendation.channel} → executed ${executed} (${policyDecision.reasonCode})`,
+  }, now);
+
+  return {
+    accountId: a.accountId,
+    recommended: recommendation.action,
+    channel: recommendation.channel,
+    executed,
+    executionResult,
+    policy: policyDecision.reasonCode,
+    source,
+    decisionId: entry.decisionId,
+  };
+}
+
+/**
+ * Idempotency: atomically claim the per-day outreach slot. Returns true only
+ * if THIS invocation set it (conditional write), false if already claimed.
+ */
+async function claimOutreachSlot(accountId: string, dayKey: string): Promise<boolean> {
+  try {
     await ddb.send(
       new UpdateCommand({
         TableName: ACCOUNT_TABLE,
-        Key: { accountId: a.accountId },
-        UpdateExpression: 'SET attemptsWithoutResponse = :n, lastOutreachChannel = :c, lastOutreachAt = :t',
-        ExpressionAttributeValues: {
-          ':n': signals.attemptsWithoutResponse + 1,
-          ':c': decision.channel,
-          ':t': new Date().toISOString(),
-        },
+        Key: { accountId },
+        UpdateExpression: 'SET lastOutreachDayKey = :k',
+        ConditionExpression: 'attribute_not_exists(lastOutreachDayKey) OR lastOutreachDayKey <> :k',
+        ExpressionAttributeValues: { ':k': dayKey },
       }),
     );
+    return true;
+  } catch (err) {
+    if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return false;
+    throw err;
   }
+}
 
-  return { scanned: accounts.length, decisions };
-};
+async function recordAttempt(a: Account, channel: string, now: Date): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: ACCOUNT_TABLE,
+      Key: { accountId: a.accountId },
+      UpdateExpression:
+        'SET attemptsWithoutResponse = :n, lastOutreachChannel = :c, lastOutreachAt = :t, outreachCountWindow = :w',
+      ExpressionAttributeValues: {
+        ':n': (a.attemptsWithoutResponse ?? 0) + 1,
+        ':c': channel,
+        ':t': now.toISOString(),
+        ':w': (a.outreachCountWindow ?? 0) + 1,
+      },
+    }),
+  );
+}

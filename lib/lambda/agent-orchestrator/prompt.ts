@@ -55,17 +55,34 @@ export function buildToolConfig(): ToolConfiguration {
         toolSpec: {
           name: 'offer_payment_plan',
           description:
-            'Create a payment plan that splits the past-due balance into installments. Returns the confirmed plan with installment amount and schedule. Keep installments realistic.',
+            'OFFER (propose) a payment plan that splits the past-due balance into installments. Returns a proposed plan with a planId. This does NOT activate the plan or collect money — the customer must accept it. Keep installments realistic (2-6).',
           inputSchema: {
             json: {
               type: 'object',
               properties: {
                 accountId: { type: 'string' },
-                installments: { type: 'number', description: 'Number of payments (2-6 typical)' },
+                installments: { type: 'number', description: 'Number of payments (2-6)' },
                 frequency: { type: 'string', enum: ['weekly', 'biweekly', 'monthly'] },
                 firstPaymentDate: { type: 'string', description: 'YYYY-MM-DD' },
               },
               required: ['accountId', 'installments', 'frequency'],
+            },
+          },
+        },
+      },
+      {
+        toolSpec: {
+          name: 'accept_payment_plan',
+          description:
+            'Activate a previously OFFERED plan once the customer explicitly agrees to it. Pass the planId returned by offer_payment_plan. This sets the plan to accepted/active — it does NOT charge the customer; each installment is collected on its due date by the billing system.',
+          inputSchema: {
+            json: {
+              type: 'object',
+              properties: {
+                accountId: { type: 'string' },
+                planId: { type: 'string' },
+              },
+              required: ['accountId', 'planId'],
             },
           },
         },

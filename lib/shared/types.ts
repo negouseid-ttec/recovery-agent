@@ -109,6 +109,8 @@ export interface Suggestion {
 
 export interface Conversation {
   recipientId: string;
+  /** Canonical cross-channel customer identity (set by identity resolution). */
+  customerId?: string;
   sessionId: string;
   preferredChannel: Channel;
   channels: ChannelAddress[];
@@ -142,6 +144,8 @@ export interface Account {
   accountId: string;
   recipientId: string;
   customerName: string;
+  /** Canonical cross-channel customer identity (independent of phone/email). */
+  customerId?: string;
   /** Telecom product the balance is for */
   productType: 'mobile' | 'internet' | 'tv' | 'bundle';
   /** Past-due balance in cents (avoid float money bugs) */
@@ -155,6 +159,27 @@ export interface Account {
   lastContactDate?: string;
   /** Monthly recurring charge in cents (for plan sizing) */
   monthlyChargeCents: number;
+
+  // ── Policy / outreach signals (optional; default-safe when absent) ──
+  /** Global opt-out — once true, NO outbound on any channel. */
+  optedOut?: boolean;
+  /** Channels the customer has opted out of individually. */
+  optedOutChannels?: Channel[];
+  /** IANA timezone for customer-local quiet-hours checks (e.g. "America/New_York"). */
+  timezone?: string;
+  /** ISO timestamp of the last outreach attempt (for min-interval enforcement). */
+  lastOutreachAt?: string;
+  /** Count of outreach attempts in the current rolling window (frequency cap). */
+  outreachCountWindow?: number;
+  /** Channel the customer last responded on (strongest routing signal). */
+  lastResponseChannel?: Channel;
+  /** Device/channel capability + reachability. */
+  rcsCapable?: boolean;
+  whatsappReachable?: boolean;
+  /** Consecutive outreach attempts with no response. */
+  attemptsWithoutResponse?: number;
+  /** Restricted flag — legal / bankruptcy / cease-and-desist: human-only. */
+  restricted?: boolean;
 }
 
 export interface PaymentPlan {
@@ -188,4 +213,126 @@ export interface Dispute {
   amountDisputedCents: number;
   status: 'open' | 'under_review' | 'resolved_valid' | 'resolved_invalid';
   createdAt: string;
+}
+
+// ─── Policy Enforcement (deterministic, LLM-independent) ─────────────────────
+
+/** Stable, auditable reason codes for a policy decision. */
+export type PolicyReasonCode =
+  | 'ALLOWED'
+  | 'GLOBAL_OPT_OUT'
+  | 'CHANNEL_OPT_OUT'
+  | 'QUIET_HOURS'
+  | 'HARDSHIP_HOLD'
+  | 'DISPUTE_HOLD'
+  | 'RESTRICTED_HUMAN_ONLY'
+  | 'FREQUENCY_CAP'
+  | 'MIN_INTERVAL'
+  | 'NOT_AUTHORIZED'
+  | 'ACCOUNT_NOT_COLLECTIBLE'
+  | 'PLAN_INELIGIBLE'
+  | 'PLAN_INSTALLMENTS_OUT_OF_RANGE'
+  | 'AMOUNT_OUT_OF_BOUNDS'
+  | 'MISSING_ARGUMENT';
+
+/** The kind of action being authorized. */
+export type PolicyActionType = 'outbound_message' | 'payment_plan' | 'promise' | 'hardship' | 'dispute' | 'escalate';
+
+export interface PolicyDecision {
+  allowed: boolean;
+  reasonCode: PolicyReasonCode;
+  reason: string;
+  evaluatedAt: string;
+  /** Constraints that shaped the decision (e.g. quiet-hours window, caps). */
+  constraints?: Record<string, unknown>;
+}
+
+export interface PolicyContext {
+  /** Now, injectable for deterministic tests. */
+  now?: Date;
+  /** The channel an outbound action would use (for channel opt-out / quiet hours). */
+  channel?: Channel;
+  /** Max outreach attempts allowed per rolling window. */
+  maxContactsPerWindow?: number;
+  /** Minimum milliseconds between outreach attempts. */
+  minIntervalMs?: number;
+  /** Quiet-hours window in customer-local time (24h). */
+  quietStartHour?: number;
+  quietEndHour?: number;
+  /** Payment-plan bounds. */
+  minInstallments?: number;
+  maxInstallments?: number;
+}
+
+// ─── Cross-channel Identity ──────────────────────────────────────────────────
+
+export type IdentityVerification = 'verified' | 'unverified';
+
+/** Maps one verified channel identifier to a canonical customer. */
+export interface IdentityLink {
+  /** PK: the raw channel identifier (E.164 phone or email), lowercased for email. */
+  channelIdentifier: string;
+  channel: Channel;
+  /** The canonical customer this identifier resolves to. */
+  customerId: string;
+  verification: IdentityVerification;
+  verifiedAt?: string;
+  createdAt: string;
+}
+
+export interface ResolvedIdentity {
+  customerId: string;
+  channelIdentifier: string;
+  channel: Channel;
+  verification: IdentityVerification;
+  /** True when this is a brand-new, unknown identifier (safe-handled). */
+  isNew: boolean;
+}
+
+// ─── AI Next-Best-Action ─────────────────────────────────────────────────────
+
+export type NbaAction = 'contact' | 'wait' | 'offer_plan' | 'hold' | 'escalate' | 'close';
+
+export interface NextBestAction {
+  action: NbaAction;
+  channel: Channel | 'none';
+  reason: string;
+  /** 0..1; flagged heuristic when not model-calibrated. */
+  confidence: number;
+  confidenceBasis: 'model' | 'heuristic';
+  expectedCostUsd: number;
+  nextReviewAt?: string;
+}
+
+/** NBA plus the deterministic policy ruling that authorizes (or vetoes) it. */
+export interface AuthorizedAction {
+  recommendation: NextBestAction;
+  policyDecision: PolicyDecision;
+  /** The action actually taken after policy — may differ from the recommendation. */
+  executed: NbaAction;
+  source: 'model' | 'heuristic-fallback';
+}
+
+// ─── Decision Audit Log ──────────────────────────────────────────────────────
+
+export interface DecisionLogEntry {
+  /** PK */
+  decisionId: string;
+  /** For tracing one logical flow across Lambdas. */
+  correlationId: string;
+  customerId?: string;
+  accountId?: string;
+  createdAt: string;
+  /** Minimized, non-sensitive input signals that drove the decision. */
+  signals: Record<string, unknown>;
+  recommendation?: NextBestAction;
+  policyDecision: PolicyDecision;
+  executedAction: string;
+  executionResult: 'dispatched' | 'blocked' | 'skipped' | 'error';
+  estCostUsd?: number;
+  modelId?: string;
+  tokenUsage?: { input?: number; output?: number };
+  /** A concise, generated summary — NEVER raw model chain-of-thought. */
+  summary?: string;
+  ttl?: number;
 }

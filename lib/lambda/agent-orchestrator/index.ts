@@ -19,9 +19,10 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { Handler } from 'aws-lambda';
 import { v4 as uuid } from 'uuid';
-import type { InboundMessage, Conversation, ConversationTurn, OutboundMessage, Channel } from '../../shared/types';
+import type { InboundMessage, Conversation, ConversationTurn, OutboundMessage, Channel, IdentityLink } from '../../shared/types';
 import { SYSTEM_PROMPT, buildToolConfig } from './prompt';
 import { executeToolCall } from './tools';
+import { resolveIdentity, type IdentityStore } from '../../shared/identity';
 
 const bedrock = new BedrockRuntimeClient({});
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -29,10 +30,24 @@ const lambdaClient = new LambdaClient({});
 
 const CONVERSATION_TABLE = process.env.CONVERSATION_TABLE!;
 const ACCOUNT_TABLE = process.env.ACCOUNT_TABLE!;
+const IDENTITY_TABLE = process.env.IDENTITY_TABLE ?? '';
 const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'us.amazon.nova-2-lite-v1:0';
 const SENDER_FUNCTION = process.env.SENDER_FUNCTION_NAME ?? 'ra-channel-sender';
 const MAX_HISTORY_TURNS = 20;
 const MAX_TOOL_ROUNDS = 5;
+
+/** DynamoDB-backed identity store (no-op safe when the table isn't configured). */
+const identityStore: IdentityStore = {
+  async getLink(channelIdentifier: string): Promise<IdentityLink | undefined> {
+    if (!IDENTITY_TABLE) return undefined;
+    const r = await ddb.send(new GetCommand({ TableName: IDENTITY_TABLE, Key: { channelIdentifier } }));
+    return r.Item as IdentityLink | undefined;
+  },
+  async putLink(link: IdentityLink): Promise<void> {
+    if (!IDENTITY_TABLE) return;
+    await ddb.send(new PutCommand({ TableName: IDENTITY_TABLE, Item: link }));
+  },
+};
 
 export const handler: Handler = async (event) => {
   const message: InboundMessage = event.message ?? event;
@@ -196,6 +211,11 @@ async function runAgentLoop(
 async function loadOrCreateConversation(message: InboundMessage): Promise<Conversation> {
   const recipientId = message.from; // E.164 phone or email
 
+  // Resolve the canonical cross-channel customer identity. A verified identifier
+  // maps to one customerId across channels; an unknown identifier gets a fresh,
+  // unverified customerId (never silently merged with an existing customer).
+  const identity = await resolveIdentity(identityStore, message.channel, message.from);
+
   const result = await ddb.send(
     new GetCommand({
       TableName: CONVERSATION_TABLE,
@@ -205,6 +225,7 @@ async function loadOrCreateConversation(message: InboundMessage): Promise<Conver
 
   if (result.Item) {
     const conv = result.Item as Conversation;
+    conv.customerId = conv.customerId ?? identity.customerId; // backfill (migration-safe)
     // Update channel list if this is a new channel for this recipient
     if (!conv.channels.find((c) => c.channel === message.channel && c.address === message.from)) {
       conv.channels.push({ channel: message.channel, address: message.from });
@@ -217,6 +238,7 @@ async function loadOrCreateConversation(message: InboundMessage): Promise<Conver
   const now = new Date();
   return {
     recipientId,
+    customerId: identity.customerId,
     sessionId: uuid(),
     preferredChannel: message.channel,
     channels: [{ channel: message.channel, address: message.from }],
