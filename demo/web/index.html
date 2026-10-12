@@ -3,239 +3,524 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Recovery Agent — A Recovery Story</title>
+<title>Recovery Agent — the autonomous decision layer</title>
 <style>
-  :root { --sms:#f59e0b; --rcs:#2563eb; --wa:#25d366; --email:#0f766e; --bg:#0f172a; --panel:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --teal:#2dd4bf; }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  html,body { height:100%; }
-  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); overflow:hidden; }
-  .gradient-text { background:linear-gradient(90deg,#2dd4bf,#60a5fa,#a78bfa); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  :root{
+    --sms:#f59e0b;--rcs:#2563eb;--wa:#25d366;--email:#0f766e;
+    --bg:#0f172a;--panel:#1e293b;--panel2:#172033;--ink:#e2e8f0;--muted:#94a3b8;--line:#334155;
+    --teal:#2dd4bf;--ai:#a78bfa;--policy:#38bdf8;--ok:#34d399;--block:#f87171;--amber:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden;}
+  .gradient-text{background:linear-gradient(90deg,#2dd4bf,#60a5fa,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 
-  /* a frame fills the viewport; only the active one shows */
-  .stage { position:relative; height:100vh; width:100vw; }
-  .frame { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; padding:48px 24px 110px; text-align:center; animation:fadein .5s ease; }
-  .frame.show { display:flex; }
-  @keyframes fadein { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
-  @keyframes pop { from{opacity:0;transform:scale(.96);} to{opacity:1;transform:none;} }
+  /* ── 16:9 stage ─────────────────────────────────────────── */
+  .app{position:fixed;inset:0;display:flex;flex-direction:column;}
+  .topbar{display:flex;align-items:center;gap:16px;padding:12px 22px;border-bottom:1px solid var(--line);background:var(--panel2);}
+  .brand{font-weight:900;font-size:16px;white-space:nowrap;}
+  .brand .dot{color:var(--teal);}
+  .headline{font-size:13px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .headline b{color:var(--ink);}
+  .tabs{display:flex;gap:6px;}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;}
+  .tab.active{background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;border-color:transparent;}
+  .view{flex:1;min-height:0;display:none;overflow:hidden;}
+  .view.show{display:flex;}
 
-  .eyebrow { font-size:13px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
-  .big { font-size:clamp(30px,5vw,52px); font-weight:900; line-height:1.08; letter-spacing:-.02em; }
-  .sub { font-size:clamp(15px,2vw,19px); color:var(--muted); margin-top:16px; max-width:720px; line-height:1.5; }
-  .pill { display:inline-block; margin-top:22px; background:var(--panel); border:1px solid #334155; border-radius:999px; padding:8px 18px; font-size:13px; color:var(--muted); }
+  /* ── GUIDED DEMO ────────────────────────────────────────── */
+  #guided{padding:22px 26px 90px;gap:28px;align-items:stretch;}
+  .stagewrap{flex:0 0 380px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .daytag{font-size:13px;color:var(--muted);margin-bottom:12px;letter-spacing:.04em;}
+  .intel{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:12px;max-width:620px;}
+  .intel h3{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+  .row{display:grid;grid-template-columns:132px 1fr;gap:12px;align-items:start;padding:11px 14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;animation:slide .35s ease;}
+  @keyframes slide{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}
+  .row .lab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px;}
+  .row .val{font-size:14px;line-height:1.45;}
+  .src{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle;}
+  .src.ai{background:rgba(167,139,250,.16);color:var(--ai);border:1px solid var(--ai);}
+  .src.policy{background:rgba(56,189,248,.16);color:var(--policy);border:1px solid var(--policy);}
+  .pverdict{font-weight:800;}
+  .pverdict.ok{color:var(--ok);}.pverdict.block{color:var(--block);}
+  .outcome{font-weight:700;color:var(--teal);}
 
-  /* problem stat grid */
-  .stats { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin-top:30px; }
-  .stat { background:var(--panel); border:1px solid #334155; border-radius:14px; padding:20px 24px; min-width:200px; max-width:260px; }
-  .stat .k { font-size:30px; font-weight:900; color:#f87171; }
-  .stat .k.good { color:var(--teal); }
-  .stat .d { font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4; }
-
-  /* "N DAYS LATER" interstitial */
-  .later { background:radial-gradient(circle at 50% 40%, #1e293b, #0b1220); }
-  .later .big { font-size:clamp(44px,8vw,96px); color:#fde68a; text-shadow:0 4px 0 rgba(0,0,0,.25); font-style:italic; }
-  .later .eyebrow { color:#fbbf24; }
-
-  /* phone frame */
-  .phone { width:340px; background:#0b1220; border:9px solid #0b1220; border-radius:38px; box-shadow:0 20px 50px rgba(0,0,0,.5),inset 0 0 0 2px #1e293b; overflow:hidden; display:flex; flex-direction:column; animation:pop .5s ease; }
-  .notch{height:22px;display:flex;align-items:center;justify-content:center;}.notch::after{content:'';width:84px;height:6px;background:#1e293b;border-radius:999px;}
+  /* phone (preserved) */
+  .phone{width:330px;background:#0b1220;border:9px solid #0b1220;border-radius:38px;box-shadow:0 20px 50px rgba(0,0,0,.5),inset 0 0 0 2px #1e293b;overflow:hidden;display:flex;flex-direction:column;animation:pop .4s ease;}
+  @keyframes pop{from{opacity:0;transform:scale(.97);}to{opacity:1;transform:none;}}
+  .notch{height:20px;display:flex;align-items:center;justify-content:center;}.notch::after{content:'';width:80px;height:6px;background:#1e293b;border-radius:999px;}
   .app-bar{padding:11px 14px;display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;color:#fff;}
   .sms .app-bar{background:var(--sms);}.rcs .app-bar{background:var(--rcs);}.whatsapp .app-bar{background:#075e54;}.email .app-bar{background:var(--email);}
   .app-bar .avatar{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:15px;}
-  .app-bar .sub2{font-weight:400;font-size:11px;opacity:.9;display:block;margin-top:0;}
-  .screen{background:#0e1726;padding:14px;display:flex;flex-direction:column;gap:9px;min-height:120px;}
+  .app-bar .sub2{font-weight:400;font-size:11px;opacity:.9;display:block;}
+  .screen{background:#0e1726;padding:14px;display:flex;flex-direction:column;gap:9px;min-height:150px;}
   .whatsapp .screen{background:#0b141a;}.email .screen{background:#f8fafc;}
   .bubble{max-width:88%;padding:10px 13px;border-radius:16px;font-size:13px;line-height:1.45;word-wrap:break-word;text-align:left;}
   .bubble.in{align-self:flex-start;background:#1e293b;color:var(--ink);border-bottom-left-radius:4px;}
   .bubble.out{align-self:flex-end;color:#fff;border-bottom-right-radius:4px;}
   .sms .bubble.out{background:var(--sms);}.rcs .bubble.out{background:var(--rcs);}.whatsapp .bubble.out{background:#005c4b;}.whatsapp .bubble.in{background:#1f2c33;}
   .bubble .who{font-size:10px;font-weight:700;opacity:.7;margin-bottom:2px;display:block;}
-  .tool-chip{align-self:center;font-size:10px;color:var(--muted);background:rgba(148,163,184,.12);border:1px solid #334155;border-radius:999px;padding:3px 10px;font-family:monospace;}
+  .tool-chip{align-self:center;font-size:10px;color:var(--muted);background:rgba(148,163,184,.12);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:monospace;}
   .email-msg{background:#fff;border-radius:10px;overflow:hidden;text-align:left;}
-  .email-head{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;}
-  .email-head .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#0f766e,#2dd4bf);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+  .email-head{padding:11px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;}
+  .email-head .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#0f766e,#2dd4bf);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;}
   .email-head .name{font-weight:700;color:#0f172a;font-size:13px;}.email-head .addr{color:#64748b;font-size:11px;}
-  .email-subject{padding:10px 14px 2px;font-weight:800;color:#0f172a;font-size:14px;}
+  .email-subject{padding:9px 14px 2px;font-weight:800;color:#0f172a;font-size:14px;}
   .email-body{padding:2px 14px 14px;color:#334155;font-size:12px;line-height:1.5;}
-  .email-body .badge{display:inline-block;background:#ecfdf5;color:#065f46;border-left:3px solid #0f766e;padding:8px 10px;border-radius:4px;margin:8px 0;font-size:11px;}
+  .email-body .badge{display:inline-block;background:#ecfdf5;color:#065f46;border-left:3px solid #0f766e;padding:7px 10px;border-radius:4px;margin:8px 0;font-size:11px;}
   .rich-card{align-self:stretch;background:#fff;color:#0f172a;border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.3);text-align:left;}
   .rich-card .rc-sender{display:flex;align-items:center;gap:6px;padding:9px 12px 0;font-size:11px;color:#1e40af;font-weight:700;}
   .rich-card .rc-verified{background:#dbeafe;color:#1e40af;border-radius:999px;padding:1px 7px;font-size:9px;font-weight:700;}
-  .rich-card .rc-media{height:92px;background:linear-gradient(135deg,#2563eb,#1e40af);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;margin-top:8px;}
-  .rich-card .rc-media .rc-amt{font-size:24px;font-weight:800;}.rich-card .rc-media .rc-cap{font-size:10px;opacity:.85;}
-  .rich-card .rc-head{padding:10px 14px 2px;}.rich-card .rc-head .t{font-weight:800;font-size:14px;}
-  .rich-card .rc-body{padding:4px 14px 10px;font-size:12px;line-height:1.45;}
-  .rich-card .rc-actions{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px;}
-  .rich-card .chip{border:1.5px solid #2563eb;color:#2563eb;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:600;}
+  .rich-card .rc-media{height:84px;background:linear-gradient(135deg,#2563eb,#1e40af);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;margin-top:8px;}
+  .rich-card .rc-media .rc-amt{font-size:22px;font-weight:800;}.rich-card .rc-media .rc-cap{font-size:10px;opacity:.85;}
+  .rich-card .rc-head{padding:9px 14px 2px;}.rich-card .rc-head .t{font-weight:800;font-size:14px;}
+  .rich-card .rc-body{padding:4px 14px 9px;font-size:12px;line-height:1.4;}
+  .rich-card .rc-actions{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 9px;}
+  .rich-card .chip{border:1.5px solid #2563eb;color:#2563eb;border-radius:999px;padding:5px 11px;font-size:11px;font-weight:600;}
   .rich-card .chip.action{background:#2563eb;color:#fff;}
-  .rich-card .rc-feat{border-top:1px solid #eef2ff;padding:8px 14px;font-size:9.5px;color:#64748b;display:flex;flex-wrap:wrap;gap:9px;}
-  .framecap { margin-top:18px; font-size:14px; color:var(--ink); max-width:560px; line-height:1.5; }
-  .framecap .reason { color:var(--teal); font-weight:600; }
-  .daytag { font-size:13px; color:var(--muted); margin-bottom:14px; }
+  .rich-card .rc-feat{border-top:1px solid #eef2ff;padding:7px 14px;font-size:9.5px;color:#64748b;display:flex;flex-wrap:wrap;gap:8px;}
 
-  /* cost ledger */
-  .ledger { background:var(--panel); border:1px solid #334155; border-radius:16px; padding:24px 28px; min-width:320px; text-align:left; }
-  .ledger .row { display:flex; justify-content:space-between; gap:40px; padding:8px 0; font-size:15px; border-bottom:1px dashed #334155; }
-  .ledger .row:last-of-type { border-bottom:none; }
-  .ledger .ch { color:var(--ink); } .ledger .amt { color:var(--muted); font-variant-numeric:tabular-nums; }
-  .ledger .total { margin-top:12px; padding-top:12px; border-top:2px solid #2dd4bf; display:flex; justify-content:space-between; font-size:19px; font-weight:800; }
-  .ledger .total .amt { color:var(--teal); }
+  /* title / problem / later / success panels inside guided */
+  .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:0 20px;}
+  .eyebrow{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);}
+  .big{font-size:clamp(28px,4vw,48px);font-weight:900;line-height:1.1;letter-spacing:-.02em;}
+  .sub{font-size:clamp(14px,1.6vw,18px);color:var(--muted);max-width:720px;line-height:1.5;}
+  .pill{display:inline-block;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 18px;font-size:13px;color:var(--muted);}
+  .stats{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;min-width:190px;max-width:250px;}
+  .stat .k{font-size:28px;font-weight:900;color:#f87171;}.stat .k.good{color:var(--teal);}
+  .stat .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;}
+  .later-c .big{font-size:clamp(40px,7vw,86px);color:#fde68a;font-style:italic;text-shadow:0 4px 0 rgba(0,0,0,.25);}
+  .later-c .eyebrow{color:#fbbf24;}
+  .ledger{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 26px;min-width:330px;text-align:left;}
+  .ledger .lrow{display:flex;justify-content:space-between;gap:36px;padding:7px 0;font-size:15px;border-bottom:1px dashed var(--line);}
+  .ledger .lrow:last-of-type{border-bottom:none;}
+  .ledger .amt{color:var(--muted);font-variant-numeric:tabular-nums;}
+  .ledger .total{margin-top:10px;padding-top:10px;border-top:2px solid #2dd4bf;display:flex;justify-content:space-between;font-size:18px;font-weight:800;}
+  .ledger .total .amt{color:var(--teal);}
+  .vs{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;}
+  .vcard{background:rgba(15,23,42,.6);border:1px solid #0f766e;border-radius:16px;padding:20px 24px;min-width:220px;}
+  .vcard .k{font-size:30px;font-weight:900;color:var(--teal);}
+  .vcard .d{font-size:12px;color:#99f6e4;margin-top:6px;line-height:1.4;}
+  .srcnote{font-size:10px;color:var(--muted);}
+  .hypo{font-size:11px;color:var(--amber);border:1px dashed var(--amber);border-radius:8px;padding:6px 12px;display:inline-block;}
 
-  /* success */
-  .success { background:radial-gradient(circle at 50% 30%, #052e2b, #0b1220); }
-  .success .headline { font-size:clamp(34px,6vw,64px); font-weight:900; }
-  .success .vs { display:flex; gap:28px; flex-wrap:wrap; justify-content:center; margin-top:26px; }
-  .success .vcard { background:rgba(15,23,42,.6); border:1px solid #0f766e; border-radius:16px; padding:22px 26px; min-width:240px; }
-  .success .vcard .k { font-size:34px; font-weight:900; color:var(--teal); }
-  .success .vcard .d { font-size:12px; color:#99f6e4; margin-top:6px; line-height:1.4; }
-  .srcnote { font-size:10px; color:var(--muted); margin-top:22px; }
+  /* ── DECISION LAB ──────────────────────────────────────── */
+  #lab{padding:22px 26px;gap:26px;}
+  .controls-panel{flex:0 0 320px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
+  .controls-panel h3,.result-panel h3{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .ctl{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 14px;}
+  .ctl label{font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .ctl .hint{font-size:11px;color:var(--muted);margin-top:4px;}
+  .ctl select,.ctl input[type=range]{width:100%;margin-top:8px;}
+  .ctl select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-size:13px;}
+  .toggle{appearance:none;width:42px;height:24px;background:var(--line);border-radius:999px;position:relative;cursor:pointer;transition:background .2s;}
+  .toggle:checked{background:var(--teal);}
+  .toggle::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;}
+  .toggle:checked::after{transform:translateX(18px);}
+  .result-panel{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
+  .decision-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;}
+  .decision-card .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .verdict-badge{font-size:20px;font-weight:900;padding:6px 16px;border-radius:10px;}
+  .verdict-badge.ok{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid var(--ok);}
+  .verdict-badge.block{background:rgba(248,113,113,.15);color:var(--block);border:1px solid var(--block);}
+  .dgrid{display:grid;grid-template-columns:150px 1fr;gap:10px 14px;font-size:14px;}
+  .dgrid .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;padding-top:2px;}
+  .code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:var(--panel2);padding:2px 7px;border-radius:5px;}
+  .sim-banner{background:rgba(251,191,36,.12);border:1px solid var(--amber);color:var(--amber);border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.5;}
 
-  .controls{position:fixed;bottom:0;left:0;right:0;padding:16px;display:flex;gap:12px;justify-content:center;background:linear-gradient(0deg,#0f172a 72%,rgba(15,23,42,0));z-index:20;}
-  button{background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;border:none;border-radius:10px;padding:12px 26px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .15s;}
-  button:hover{transform:translateY(-2px);} button:disabled{opacity:.4;cursor:not-allowed;transform:none;}
-  button.ghost{background:#1e293b;border:1px solid #334155;}
-  .counter{position:fixed;top:14px;right:18px;font-size:12px;color:var(--muted);z-index:20;}
+  /* ── EXECUTION EVIDENCE ────────────────────────────────── */
+  #evidence{padding:22px 32px;flex-direction:column;overflow-y:auto;}
+  #evidence h2{font-size:20px;font-weight:900;margin-bottom:4px;}
+  #evidence .lead{font-size:13px;color:var(--muted);margin-bottom:18px;max-width:820px;line-height:1.5;}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;font-size:12px;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dotl{width:10px;height:10px;border-radius:50%;display:inline-block;}
+  .timeline{border-left:2px solid var(--line);margin-left:8px;padding-left:0;}
+  .tl{position:relative;padding:0 0 18px 26px;}
+  .tl::before{content:'';position:absolute;left:-7px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--panel);border:2px solid var(--muted);}
+  .tl.aws::before{border-color:#ff9900;background:#ff9900;}
+  .tl.tool::before{border-color:var(--ai);background:var(--ai);}
+  .tl.policy::before{border-color:var(--policy);background:var(--policy);}
+  .tl .h{font-size:14px;font-weight:700;}
+  .tl .m{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5;}
+  .tl .m code{font-family:ui-monospace,Menlo,monospace;background:var(--panel2);padding:1px 6px;border-radius:4px;color:var(--ink);}
+  .tag{font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:2px 7px;border-radius:999px;margin-left:8px;vertical-align:middle;}
+  .tag.live{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid var(--ok);}
+  .tag.example{background:rgba(251,191,36,.12);color:var(--amber);border:1px solid var(--amber);}
+
+  /* ── controls bar ──────────────────────────────────────── */
+  .controls{position:fixed;bottom:0;left:0;right:0;padding:14px;display:flex;gap:10px;justify-content:center;align-items:center;background:linear-gradient(0deg,#0f172a 72%,rgba(15,23,42,0));z-index:30;}
+  button{background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;border:none;border-radius:10px;padding:11px 24px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .15s;}
+  button:hover{transform:translateY(-2px);}button:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+  button.ghost{background:#1e293b;border:1px solid var(--line);}
+  .counter{position:fixed;top:62px;right:18px;font-size:12px;color:var(--muted);z-index:30;}
+  .fs{position:fixed;top:62px;left:18px;z-index:30;}
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
 </style>
 </head>
 <body>
-<div class="counter" id="counter"></div>
-<div class="stage" id="stage"></div>
-<div class="controls">
-  <button class="ghost" id="prevBtn" onclick="go(-1)" disabled>‹ Back</button>
-  <button id="nextBtn" onclick="go(1)">▶ Start the story</button>
-  <button class="ghost" onclick="location.reload()">↻ Restart</button>
-</div>
-<script>
-const COST = { email:0.0001, sms:0.0075, rcs:0.012, whatsapp:0.035 };
-const SUB = { email:'Amazon SES · ~$0.0001/msg', sms:'AWS EUM · SMS · ~$0.0075/msg', rcs:'AWS EUM · RCS · ~$0.012/msg', whatsapp:'AWS EUM Social · WhatsApp · ~$0.035/msg' };
+<div class="app">
+  <div class="topbar">
+    <div class="brand">💸 Recovery Agent<span class="dot">.</span></div>
+    <div class="headline"><b>Your channels deliver messages. Recovery Agent decides what happens next.</b> &nbsp;The autonomous decision layer over existing telecom comms.</div>
+    <div class="tabs">
+      <div class="tab active" data-view="guided" onclick="setView('guided')">Guided Demo</div>
+      <div class="tab" data-view="lab" onclick="setView('lab')">Decision Lab</div>
+      <div class="tab" data-view="evidence" onclick="setView('evidence')">Execution Evidence</div>
+    </div>
+  </div>
 
-function phone(ch, inner){
+  <!-- GUIDED -->
+  <div class="view show" id="guided">
+    <div class="stagewrap" id="stagewrap"></div>
+    <div class="intel" id="intel"></div>
+  </div>
+
+  <!-- DECISION LAB -->
+  <div class="view" id="lab">
+    <div class="controls-panel">
+      <h3>Customer conditions</h3>
+      <div class="sim-banner">⚠ <b>Simulated.</b> These controls run the project's <i>deterministic</i> policy + channel-selection logic in your browser (ported from <code>lib/shared/recovery-policy.ts</code> &amp; <code>channel-strategy.ts</code>). They do <b>not</b> call Amazon Bedrock — no live AI inference here.</div>
+      <div class="ctl"><label>Payment status
+        <select id="c_status" onchange="runLab()">
+          <option value="past_due">past_due</option>
+          <option value="hardship_hold">hardship_hold</option>
+          <option value="in_dispute">in_dispute</option>
+          <option value="current">current (paid)</option>
+        </select></label></div>
+      <div class="ctl"><label>Global opt-out <input type="checkbox" class="toggle" id="c_optout" onchange="runLab()"></label>
+        <div class="hint">Customer asked for no further contact.</div></div>
+      <div class="ctl"><label>Restricted (legal / bankruptcy) <input type="checkbox" class="toggle" id="c_restricted" onchange="runLab()"></label>
+        <div class="hint">Human-only handling required.</div></div>
+      <div class="ctl"><label>Days overdue <b id="c_days_v">32</b></label>
+        <input type="range" id="c_days" min="0" max="90" value="32" oninput="document.getElementById('c_days_v').textContent=this.value;runLab()"></div>
+      <div class="ctl"><label>Past-due balance <b id="c_bal_v">$84</b></label>
+        <input type="range" id="c_bal" min="0" max="1000" value="84" oninput="document.getElementById('c_bal_v').textContent='$'+this.value;runLab()"></div>
+      <div class="ctl"><label>Prior attempts (no response) <b id="c_att_v">3</b></label>
+        <input type="range" id="c_att" min="0" max="5" value="3" oninput="document.getElementById('c_att_v').textContent=this.value;runLab()"></div>
+      <div class="ctl"><label>RCS-capable device <input type="checkbox" class="toggle" id="c_rcs" checked onchange="runLab()"></label></div>
+      <div class="ctl"><label>WhatsApp reachable <input type="checkbox" class="toggle" id="c_wa" checked onchange="runLab()"></label></div>
+      <div class="ctl"><label>Customer-local hour <b id="c_hour_v">12</b></label>
+        <input type="range" id="c_hour" min="0" max="23" value="12" oninput="document.getElementById('c_hour_v').textContent=this.value;runLab()"></div>
+    </div>
+    <div class="result-panel">
+      <h3>Decision</h3>
+      <div id="labResult"></div>
+    </div>
+  </div>
+
+  <!-- EXECUTION EVIDENCE -->
+  <div class="view" id="evidence">
+    <h2>Execution Evidence</h2>
+    <div class="lead">What actually runs on AWS when the agent handles an inbound reply. Items marked <span class="tag live">LIVE-VERIFIED</span> were observed on the deployed stack (account vf-dev-team5, us-east-1); items marked <span class="tag example">EXAMPLE</span> are representative traces for channels still in AWS messaging sandbox.</div>
+    <div class="legend">
+      <span><i class="dotl" style="background:#ff9900"></i> AWS service</span>
+      <span><i class="dotl" style="background:var(--ai)"></i> Agent / tool call</span>
+      <span><i class="dotl" style="background:var(--policy)"></i> Deterministic policy check</span>
+    </div>
+    <div class="timeline" id="evTimeline"></div>
+  </div>
+</div>
+
+<div class="counter" id="counter"></div>
+<button class="ghost fs" id="fsBtn" onclick="toggleFs()">⛶ Fullscreen</button>
+<div class="controls" id="guidedControls">
+  <button class="ghost" id="prevBtn" onclick="go(-1)" disabled>‹ Back</button>
+  <button id="playBtn" onclick="togglePlay()">▶ Autoplay</button>
+  <button id="nextBtn" onclick="go(1)">Start ›</button>
+  <button class="ghost" onclick="resetStory()">↻ Restart</button>
+</div>
+
+<script>
+/* ============================================================
+   SOURCE-AWARE DATA ADAPTER
+   The UI renders from `fixtures` below. To wire real data later,
+   implement loadTrace() to return the same shape from a sanitized
+   decision-log export (see the DATA CONTRACT in the repo README).
+   Nothing here calls a backend; all data is explicitly labeled.
+   ============================================================ */
+const DATA_SOURCE = 'fixture'; // 'fixture' | 'recorded-trace'
+async function loadTrace(){ return GUIDED_FIXTURE; } // swap for real export later
+
+const COST={email:0.0001,sms:0.0075,rcs:0.012,whatsapp:0.035};
+const SUB={email:'Amazon SES · ~$0.0001/msg',sms:'AWS EUM · SMS · ~$0.0075/msg',rcs:'AWS EUM · RCS · ~$0.012/msg',whatsapp:'AWS EUM Social · WhatsApp · ~$0.035/msg'};
+
+function phone(ch,inner){
   return `<div class="phone ${ch}"><div class="notch"></div>
     <div class="app-bar"><div class="avatar">${ch==='email'?'📧':'💸'}</div>
-    <div>${ch==='email'?'Inbox':ch==='sms'?'Messages':'Recovery Agent'}<span class="sub2">${SUB[ch]}</span></div></div>
+    <div>${ch==='email'?'Inbox':ch==='sms'?'Messages':'Recovery Agent'}<span class="sub2">${SUB[ch]||''}</span></div></div>
     <div class="screen">${inner}</div></div>`;
 }
-const richCard = `
-  <div class="rich-card">
-    <div class="rc-sender">Recovery Agent <span class="rc-verified">✓ Verified</span></div>
-    <div class="rc-media"><div><div class="rc-amt">$84.00</div><div class="rc-cap">PAST DUE</div></div></div>
-    <div class="rc-head"><div class="t">Let's resolve your balance</div></div>
-    <div class="rc-body">No call, no hold — just tap. Your service stays on while you're on a plan.</div>
-    <div class="rc-actions"><span class="chip">💳 Pay now</span><span class="chip">📅 Split into payments</span><span class="chip action">☎ Call me</span><span class="chip action">🙋 I need help</span></div>
-    <div class="rc-feat"><span>✓ Verified sender</span><span>🖼 Rich media</span><span>⌨ Typing shown</span><span>✓✓ Read receipts</span><span>↩ SMS fallback</span></div>
-  </div>`;
+const richCard=`<div class="rich-card">
+  <div class="rc-sender">Recovery Agent <span class="rc-verified">✓ Verified</span></div>
+  <div class="rc-media"><div><div class="rc-amt">$84.00</div><div class="rc-cap">PAST DUE</div></div></div>
+  <div class="rc-head"><div class="t">Let's resolve your balance</div></div>
+  <div class="rc-body">No call, no hold — just tap. Your service stays on while you're on a plan.</div>
+  <div class="rc-actions"><span class="chip">💳 Pay now</span><span class="chip">📅 Split into payments</span><span class="chip action">🙋 I need help</span></div>
+  <div class="rc-feat"><span>✓ Verified sender</span><span>🖼 Rich media</span><span>✓✓ Read receipts</span><span>↩ SMS fallback</span></div></div>`;
 
-// ─── FRAMES ──────────────────────────────────────────────────────────────
-const frames = [
-  // 1 Title
-  { html:`<div class="eyebrow">AWS Communication Developer Services</div>
-    <div class="big">💸 A <span class="gradient-text">Recovery</span> Story</div>
-    <div class="sub">How an agentic AI recovers past-due revenue through conversation — on the cheapest channel that works, and knows when to stop.</div>` },
+/* intelligence-panel row builder */
+function intel(rows){
+  return `<h3>Agent intelligence · this step</h3>` + rows.map(r=>`
+    <div class="row"><div class="lab">${r.k}</div><div class="val">${r.v}</div></div>`).join('');
+}
 
-  // 2 Problem
-  { html:`<div class="eyebrow">The Problem</div>
-    <div class="big">Telecom Co. is bleeding revenue.</div>
+/* ── GUIDED FIXTURE (the Dana scenario, now with the decision layer) ── */
+const GUIDED_FIXTURE=[
+  { kind:'title', html:`<div class="center"><div class="eyebrow">AWS Communication Developer Services + Amazon Bedrock</div>
+    <div class="big">Your channels deliver messages.<br><span class="gradient-text">Recovery Agent decides what happens next.</span></div>
+    <div class="sub">Telecom companies already have SMS, RCS, WhatsApp, and email. Recovery Agent is the autonomous decision layer that uses them to recover past-due revenue — cheapest effective channel first, and it knows when to stop.</div></div>` },
+
+  { kind:'problem', html:`<div class="center"><div class="eyebrow">The problem</div>
+    <div class="big">Having the channels isn't the hard part.</div>
     <div class="stats">
-      <div class="stat"><div class="k">~3%</div><div class="d">recovered by automated robocalls — customers ignore them</div></div>
-      <div class="stat"><div class="k">$5–$25</div><div class="d">cost per live-agent call attempt — most reach voicemail</div></div>
-      <div class="stat"><div class="k">~11%</div><div class="d">of face value is all the collections industry recovers (ACA)</div></div>
+      <div class="stat"><div class="k">~3%</div><div class="d">recovered by automated robocalls — ignored</div></div>
+      <div class="stat"><div class="k">$5–$25</div><div class="d">per live-agent call attempt — mostly voicemail</div></div>
+      <div class="stat"><div class="k">~11%</div><div class="d">of face value is all collections recover (ACA)</div></div>
     </div>
-    <div class="sub">Chasing people harder costs more and drives them to churn. There had to be a better way.</div>` },
+    <div class="sub">Deciding <i>who</i> to contact, on <i>which</i> channel, <i>when</i>, and <i>when to stop</i> — intelligently and compliantly — is the hard part. That's the layer we built.</div></div>` },
 
-  // 3 Meet Dana
-  { html:`<div class="eyebrow">One account</div>
+  { kind:'meet', html:`<div class="center"><div class="eyebrow">One account</div>
     <div class="big">Meet Dana.</div>
-    <div class="sub">Her account is <b>$84.00 past due</b>, <b>32 days</b> overdue. Service pauses in <b>10 days</b>.<br>Telecom Co. hands it to <span class="gradient-text">Recovery Agent</span>.</div>
-    <div class="pill">Account ACCT-TEL-80231 · status: past_due</div>` },
+    <div class="sub"><b>$84.00 past due</b>, <b>32 days</b> overdue, service pauses in <b>10 days</b>. Telecom Co. hands the account to <span class="gradient-text">Recovery Agent</span>.</div>
+    <div class="pill">ACCT-TEL-80231 · status: past_due · timezone: America/New_York</div></div>` },
 
-  // 4 Email Day 0
-  { day:'Day 0', ch:'email', spend:'email',
-    html:`<div class="daytag">Step 1 · Day 0</div>${phone('email',`
-      <div class="email-msg"><div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div>
+  { kind:'step', day:'Step 1 · Day 0', ch:'email', spend:'email',
+    phone: phone('email',`<div class="email-msg"><div class="email-head"><div class="av">RA</div><div><div class="name">Recovery Agent</div><div class="addr">recovery@telecom.example</div></div></div>
       <div class="email-subject">Your account is past due — we can help</div>
-      <div class="email-body">Hi Dana, your account has a past-due balance of <b>$84.00</b>. Reply or we'll follow up — we can split it into smaller payments.<div class="badge">📧 Attempt 1 · Email · ~$0.0001</div></div></div>`)}
-      <div class="framecap"><span class="reason">Agent decision:</span> start on the cheapest, least-intrusive channel — Email.</div>` },
+      <div class="email-body">Hi Dana, your balance of <b>$84.00</b> is past due. Reply and we can split it into smaller payments.<div class="badge">📧 Attempt 1 · Email · ~$0.0001</div></div></div>`),
+    rows:[
+      {k:'Context',v:'Dana · ACCT-TEL-80231 · $84.00 past due · 32 days · no prior contact'},
+      {k:'Observation',v:'Past-due, collectible, no engagement yet.'},
+      {k:'Recommendation',v:'Contact on <b>Email</b> <span class="src ai">AI · heuristic baseline</span>'},
+      {k:'Policy check',v:'<span class="pverdict ok">ALLOWED</span> — not opted-out, no hold, outside quiet hours.'},
+      {k:'Action',v:'Dispatch via <code>Amazon SES</code> (~$0.0001)'},
+      {k:'Outcome',v:'<span class="outcome">Delivered.</span> No reply after 3 days.'} ] },
 
-  // 5 LATER
-  { later:true, html:`<div class="eyebrow">meanwhile…</div><div class="big">3 DAYS LATER</div><div class="sub">Email unopened. No reply.</div>` },
+  { kind:'later', html:`<div class="center later-c"><div class="eyebrow">meanwhile…</div><div class="big">3 DAYS LATER</div><div class="sub">Email unopened. No reply.</div></div>` },
 
-  // 6 SMS Day 3
-  { day:'Day 3', ch:'sms', spend:'sms',
-    html:`<div class="daytag">Step 2 · Day 3</div>${phone('sms',`
-      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Hi Dana, following up on your past-due balance of $84.00. Reply HELP and I'll make it easy — pay in full or split into smaller payments.</div>`)}
-      <div class="framecap"><span class="reason">Agent decision:</span> no response on email → escalate to SMS (higher reach, read fast).</div>` },
+  { kind:'step', day:'Step 2 · Day 3', ch:'sms', spend:'sms',
+    phone: phone('sms',`<div class="bubble in"><span class="who">🤖 Recovery Agent</span>Hi Dana, following up on your past-due balance of $84.00. Reply HELP — pay in full or split into smaller payments.</div>`),
+    rows:[
+      {k:'Observation',v:'No response on the cheapest channel (1 attempt, silent).'},
+      {k:'Recommendation',v:'Escalate to <b>SMS</b> <span class="src ai">AI · cost-ordered ladder</span>'},
+      {k:'Policy check',v:'<span class="pverdict ok">ALLOWED</span> — min-interval satisfied, within contact window.'},
+      {k:'Action',v:'Dispatch via <code>AWS End User Messaging · SendTextMessage</code>'},
+      {k:'Outcome',v:'<span class="outcome">Delivered.</span> Still silent after 4 days.'} ] },
 
-  // 7 LATER
-  { later:true, html:`<div class="eyebrow">meanwhile…</div><div class="big">4 DAYS LATER</div><div class="sub">Still silent.</div>` },
+  { kind:'later', html:`<div class="center later-c"><div class="eyebrow">meanwhile…</div><div class="big">4 DAYS LATER</div><div class="sub">Still silent.</div></div>` },
 
-  // 8 RCS Day 7
-  { day:'Day 7', ch:'rcs', spend:'rcs',
-    html:`<div class="daytag">Step 3 · Day 7</div>${phone('rcs', richCard)}
-      <div class="framecap"><span class="reason">Agent decision:</span> escalate to RCS — branded verified sender, rich media, tap-to-act. Auto-falls back to SMS if the device can't render RCS.</div>` },
+  { kind:'step', day:'Step 3 · Day 7', ch:'rcs', spend:'rcs',
+    phone: phone('rcs', richCard),
+    rows:[
+      {k:'Observation',v:'Two silent attempts; approaching suspension.'},
+      {k:'Recommendation',v:'Escalate to <b>RCS</b> — branded, tap-to-act <span class="src ai">AI · ladder</span>'},
+      {k:'Policy check',v:'<span class="pverdict ok">ALLOWED</span>. Device not confirmed RCS-capable → <b>deterministic RCS→SMS fallback</b> ready.'},
+      {k:'Action',v:'Dispatch via <code>AWS EUM · SendRcsMessage</code> (verified agent)'},
+      {k:'Outcome',v:'<span class="outcome">Delivered.</span> No tap, no reply after 3 days.'} ] },
 
-  // 9 LATER
-  { later:true, html:`<div class="eyebrow">meanwhile…</div><div class="big">3 DAYS LATER</div><div class="sub">No tap. No reply.</div>` },
+  { kind:'later', html:`<div class="center later-c"><div class="eyebrow">meanwhile…</div><div class="big">3 DAYS LATER</div><div class="sub">No tap. No reply.</div></div>` },
 
-  // 10 WhatsApp Day 10 — Dana replies
-  { day:'Day 10', ch:'whatsapp', spend:'whatsapp',
-    html:`<div class="daytag">Step 4 · Day 10</div>${phone('whatsapp',`
-      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Hi Dana, it's your telecom. I don't want your service to pause. I'm here on WhatsApp whenever it's easiest — we can sort your $84.00 balance together, no pressure.</div>
-      <div class="bubble out">honestly I just lost my job, money is really tight</div>`)}
-      <div class="framecap"><span class="reason">Agent decision:</span> no response on cheaper channels + severely overdue → escalate to WhatsApp, the richest, most personal channel. And this time… she replies.</div>` },
+  { kind:'step', day:'Step 4 · Day 10', ch:'whatsapp', spend:'whatsapp',
+    phone: phone('whatsapp',`<div class="bubble in"><span class="who">🤖 Recovery Agent</span>Hi Dana, I don't want your service to pause. I'm here on WhatsApp whenever it's easiest — we can sort your $84.00 balance together, no pressure.</div>
+      <div class="bubble out">honestly I just lost my job, money is really tight</div>`),
+    rows:[
+      {k:'Observation',v:'Severely overdue, high-value touch justified; no cheaper channel worked.'},
+      {k:'Recommendation',v:'Escalate to <b>WhatsApp</b> (reserved for high-value/overdue) <span class="src ai">AI · ladder</span>'},
+      {k:'Policy check',v:'<span class="pverdict ok">ALLOWED</span> — WhatsApp reachable, within window.'},
+      {k:'Action',v:'Dispatch via <code>AWS EUM Social · SendWhatsAppMessage</code>'},
+      {k:'Outcome',v:'<span class="outcome">Dana replies.</span> Inbound triaged by Bedrock → <code>hardship / distressed</code>.'} ] },
 
-  // 11 Hardship — agent acts
-  { ch:'whatsapp', status:'hardship_hold',
-    html:`<div class="daytag">Step 5 · The agent reasons &amp; acts</div>${phone('whatsapp',`
-      <div class="tool-chip">⚙ agent → apply_hardship</div>
-      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>I'm really sorry to hear that — thank you for telling me. I've paused late fees and the suspension. Let's set up something that actually fits: how about <b>3 payments of $28</b>, first one in two weeks?</div>
-      <div class="bubble out">that actually works. thank you</div>`)}
-      <div class="framecap"><span class="reason">It doesn't push.</span> It detects hardship, pauses fees, honors the person — and offers a plan she can afford. Compliance + empathy, built in.</div>` },
+  { kind:'step', day:'Step 5 · The agent reasons & acts', ch:'whatsapp', spend:null, status:'hardship_hold',
+    phone: phone('whatsapp',`<div class="tool-chip">⚙ agent → apply_hardship</div>
+      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>I'm really sorry to hear that — thank you for telling me. I've paused late fees and the suspension. How about <b>3 payments of $28</b>, first one in two weeks?</div>
+      <div class="bubble out">that actually works. thank you</div>`),
+    rows:[
+      {k:'Observation',v:'Inbound intent = <code>hardship</code>, sentiment = <code>distressed</code> <span class="src ai">AI · triage (Bedrock)</span>'},
+      {k:'Recommendation',v:'Do <b>not</b> push. Apply hardship hold + offer affordable plan <span class="src ai">AI</span>'},
+      {k:'Policy check',v:'<span class="pverdict ok">ALLOWED</span>. Tools: <code>apply_hardship</code>, <code>offer_payment_plan</code> (installments 2–6, bounds enforced) <span class="src policy">deterministic</span>'},
+      {k:'Action',v:'<code>apply_hardship</code> → status <code>hardship_hold</code>; <code>offer_payment_plan</code> → 3×$28 <b>proposed</b>'},
+      {k:'Outcome',v:'<span class="outcome">Hardship honored.</span> Fees + suspension paused in our records; plan offered.'} ] },
 
-  // 12 Payment — resolved
-  { ch:'whatsapp', status:'plan_active · paid',
-    html:`<div class="daytag">Step 6 · Resolved with a payment</div>${phone('whatsapp',`
-      <div class="bubble out">just paid the first $28 👍</div>
-      <div class="tool-chip">⚙ agent → record_payment + send_receipt</div>
-      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Got it — $28.00 received, $56.00 across your next two payments. Your service stays on. I've emailed your receipt. Thank you, Dana. 🎉</div>`)}
-      <div class="framecap"><span class="reason">Account recovered.</span> Past-due → on an active plan, first payment in, service never interrupted, customer retained.</div>` },
+  { kind:'step', day:'Step 6 · Resolved', ch:'whatsapp', spend:null, status:'plan_active',
+    phone: phone('whatsapp',`<div class="bubble out">I can do the first $28 now</div>
+      <div class="tool-chip">⚙ agent → accept_payment_plan + send_receipt</div>
+      <div class="bubble in"><span class="who">🤖 Recovery Agent</span>Done — your plan is active: $28.00 due now, then two more of $28.00. Your service stays on. I've emailed your confirmation. Thank you, Dana.</div>`),
+    rows:[
+      {k:'Observation',v:'Customer accepts the proposed plan.'},
+      {k:'Recommendation',v:'Activate plan + send written confirmation <span class="src ai">AI</span>'},
+      {k:'Policy check',v:'<span class="pverdict ok">ALLOWED</span>. <code>accept_payment_plan</code> → proposed→accepted (no funds charged in-agent) <span class="src policy">deterministic</span>'},
+      {k:'Action',v:'<code>accept_payment_plan</code> → status <code>plan_active</code>; <code>send_receipt</code> via <code>Amazon SES</code>'},
+      {k:'Outcome',v:'<span class="outcome">$28 paid, $56 scheduled.</span> Each installment is collected on its due date by billing — not by the agent.'} ] },
 
-  // 13 Cost breakdown
-  { html:`<div class="eyebrow">What did the recovery cost?</div>
+  { kind:'cost', html:`<div class="center"><div class="eyebrow">What did the outreach cost?</div>
     <div class="ledger">
-      <div class="row"><span class="ch">📧 Email · Day 0</span><span class="amt">$0.0001</span></div>
-      <div class="row"><span class="ch">📱 SMS · Day 3</span><span class="amt">$0.0075</span></div>
-      <div class="row"><span class="ch">💬 RCS · Day 7</span><span class="amt">$0.0120</span></div>
-      <div class="row"><span class="ch">📲 WhatsApp · Day 10</span><span class="amt">$0.0350</span></div>
-      <div class="total"><span>Total outreach</span><span class="amt">≈ $0.0546</span></div>
+      <div class="lrow"><span>📧 Email · Day 0</span><span class="amt">$0.0001</span></div>
+      <div class="lrow"><span>📱 SMS · Day 3</span><span class="amt">$0.0075</span></div>
+      <div class="lrow"><span>💬 RCS · Day 7</span><span class="amt">$0.0120</span></div>
+      <div class="lrow"><span>📲 WhatsApp · Day 10</span><span class="amt">$0.0350</span></div>
+      <div class="total"><span>Est. messaging cost</span><span class="amt">≈ $0.0546</span></div>
     </div>
-    <div class="sub">Four channels, ten days, one AI agent — about <b>five cents</b>.</div>` },
+    <div class="sub">≈ <b>5¢ estimated messaging cost</b> — excludes Amazon Bedrock inference and infrastructure, which add a small additional per-decision cost.</div></div>` },
 
-  // 14 Success
-  { success:true, html:`<div class="eyebrow">The result</div>
-    <div class="headline"><span class="gradient-text">$84.00 recovered</span><br>for about <span style="color:var(--teal)">5¢</span>.</div>
+  { kind:'success', html:`<div class="center"><div class="eyebrow">The outcome</div>
+    <div class="big"><span class="gradient-text">$28 paid, $56 scheduled</span><br>on an active plan — service never interrupted.</div>
     <div class="vs">
-      <div class="vcard"><div class="k">~$0.05</div><div class="d">AI outreach to recover this account</div></div>
-      <div class="vcard"><div class="k">$5–$25</div><div class="d">cost of a single live-agent call attempt</div></div>
+      <div class="vcard"><div class="k">≈ 5¢</div><div class="d">estimated messaging cost to reach + resolve this account</div></div>
+      <div class="vcard"><div class="k">$5–$25</div><div class="d">cost of a single live-agent call attempt (Gartner range)</div></div>
     </div>
-    <div class="sub">At scale on a <b>$10M</b> past-due book: recover seven figures in revenue <b>and</b> cut cost-to-collect <b>25–35%</b> (Deloitte) — while keeping customers.</div>
-    <div class="srcnote">Sources: CFPB · ACA International · Gartner · Deloitte (2025)</div>` },
+    <div class="hypo">Hypothetical scale scenario — not a measured result: on a $10M past-due book, mature AI collections cut cost-to-collect ~25–35% (Deloitte, 2025).</div>
+    <div class="srcnote">Sources: CFPB · ACA International · Gartner · Deloitte (2025). Per-account figures are from this scenario; scale figures are illustrative projections.</div></div>` },
 ];
 
-const stage=document.getElementById('stage');
-let i=0, spend=0;
-function render(){
+/* ── GUIDED render ── */
+const stagewrap=document.getElementById('stagewrap');
+const intelEl=document.getElementById('intel');
+let frames=GUIDED_FIXTURE, i=0, playing=false, timer=null;
+
+function renderGuided(){
   const f=frames[i]; if(!f) return;
-  stage.innerHTML=`<div class="frame show ${f.later?'later':''} ${f.success?'success':''}">${f.html}</div>`;
+  if(f.kind==='step'){
+    stagewrap.innerHTML=`<div class="daytag">${f.day}</div>${f.phone}`;
+    intelEl.style.display='flex';
+    intelEl.innerHTML=intel(f.rows);
+  } else {
+    stagewrap.innerHTML=f.html;
+    stagewrap.style.flex='1';
+    intelEl.style.display='none';
+  }
+  if(f.kind==='step'){ stagewrap.style.flex='0 0 380px'; }
   document.getElementById('counter').textContent='Frame '+(i+1)+' / '+frames.length;
   document.getElementById('prevBtn').disabled=i<=0;
   const n=document.getElementById('nextBtn');
-  if(i>=frames.length-1){ n.disabled=true; n.textContent='✓ The End'; }
-  else { n.disabled=false; n.textContent = i===0 ? '▶ Start the story' : 'Next ›'; }
+  if(i>=frames.length-1){ n.disabled=true; n.textContent='✓ End'; stopPlay(); }
+  else { n.disabled=false; n.textContent=i===0?'Start ›':'Next ›'; }
 }
-function go(d){ const t=i+d; if(t<0||t>=frames.length) return; i=t; render(); }
-if(new URLSearchParams(location.search).get("nofx")==="1"){const st=document.createElement("style");st.textContent="*{animation:none !important}";document.head.appendChild(st);} const qp=new URLSearchParams(location.search).get('frame'); if(qp!==null){ i=Math.max(0,Math.min(frames.length-1,+qp-1)); }
-render();
-document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight') go(1); if(e.key==='ArrowLeft') go(-1); });
-if(new URLSearchParams(location.search).get('autoplay')==='1'){ (async()=>{ while(i<frames.length-1){ go(1); await new Promise(r=>setTimeout(r,2600)); } })(); }
+function go(d){ const t=i+d; if(t<0||t>=frames.length) return; i=t; renderGuided(); }
+function resetStory(){ i=0; stopPlay(); renderGuided(); }
+function togglePlay(){ playing?stopPlay():startPlay(); }
+function startPlay(){ playing=true; document.getElementById('playBtn').textContent='⏸ Pause';
+  timer=setInterval(()=>{ if(i>=frames.length-1){stopPlay();return;} go(1); },2600); }
+function stopPlay(){ playing=false; document.getElementById('playBtn').textContent='▶ Autoplay'; if(timer)clearInterval(timer); timer=null; }
+
+/* ============================================================
+   DECISION LAB — ports the DETERMINISTIC logic (policy + ladder).
+   Mirrors lib/shared/recovery-policy.ts + channel-strategy.ts.
+   Clearly simulated; no Bedrock call.
+   ============================================================ */
+const LADDER=['email','sms','rcs','whatsapp'];
+const HIGH_VALUE=40000, QS=21, QE=8;
+function evaluateOutbound(a){
+  if(a.optedOut) return{allowed:false,code:'GLOBAL_OPT_OUT',reason:'Customer globally opted out of all contact.'};
+  if(a.restricted) return{allowed:false,code:'RESTRICTED_HUMAN_ONLY',reason:'Account restricted (legal/bankruptcy); human-only.'};
+  if(a.status==='hardship_hold') return{allowed:false,code:'HARDSHIP_HOLD',reason:'Hardship hold; collection suppressed.'};
+  if(a.status==='in_dispute') return{allowed:false,code:'DISPUTE_HOLD',reason:'Account in dispute; collection paused.'};
+  if(a.status==='current') return{allowed:false,code:'ACCOUNT_NOT_COLLECTIBLE',reason:'No collectible balance.'};
+  const h=a.localHour; if(h>=QS||h<QE) return{allowed:false,code:'QUIET_HOURS',reason:`Customer-local quiet hours (21:00–08:00); hour is ${h}.`};
+  return{allowed:true,code:'ALLOWED',reason:'Outbound permitted by policy.'};
+}
+function selectChannel(a){
+  const highValue=a.pastDueCents>=HIGH_VALUE;
+  const eligible=LADDER.filter(ch=>{
+    if(ch==='whatsapp'&&!a.whatsappReachable) return false;
+    if(ch==='whatsapp'&&!highValue&&a.daysPastDue<30) return false;
+    return true;
+  });
+  const idx=Math.min(a.attemptsWithoutResponse,eligible.length-1);
+  let picked=eligible[idx]||'email';
+  if(picked==='rcs'&&!a.rcsCapable) picked='sms';
+  return{channel:picked,cost:COST[picked]};
+}
+function runLab(){
+  const a={
+    status:document.getElementById('c_status').value,
+    optedOut:document.getElementById('c_optout').checked,
+    restricted:document.getElementById('c_restricted').checked,
+    daysPastDue:+document.getElementById('c_days').value,
+    pastDueCents:(+document.getElementById('c_bal').value)*100,
+    attemptsWithoutResponse:+document.getElementById('c_att').value,
+    rcsCapable:document.getElementById('c_rcs').checked,
+    whatsappReachable:document.getElementById('c_wa').checked,
+    localHour:+document.getElementById('c_hour').value,
+  };
+  const pol=evaluateOutbound(a);
+  const ladder=selectChannel(a);
+  // AI (simulated) would recommend contact on the ladder channel; policy authorizes.
+  const aiWants = a.status==='current' ? 'close' : (pol.code==='HARDSHIP_HOLD'||pol.code==='DISPUTE_HOLD')?'hold':(pol.code==='RESTRICTED_HUMAN_ONLY')?'escalate':'contact';
+  let executed = aiWants;
+  if(aiWants==='contact' && !pol.allowed){
+    executed = (pol.code==='QUIET_HOURS'||pol.code==='FREQUENCY_CAP'||pol.code==='MIN_INTERVAL')?'wait':(pol.code==='RESTRICTED_HUMAN_ONLY')?'escalate':'hold';
+  }
+  const el=document.getElementById('labResult');
+  el.innerHTML=`
+    <div class="sim-banner">⚠ <b>Simulated decision.</b> Deterministic policy + ladder, computed in-browser. The “AI recommendation” shown is the heuristic baseline — not a live Amazon Bedrock inference.</div>
+    <div class="decision-card">
+      <div class="top">
+        <span class="verdict-badge ${pol.allowed?'ok':'block'}">${pol.allowed?'OUTBOUND ALLOWED':'OUTBOUND BLOCKED'}</span>
+        <span class="code">reasonCode: ${pol.code}</span>
+      </div>
+      <div class="dgrid">
+        <div class="k">AI recommendation</div><div>${aiWants==='contact'?`contact · <b>${ladder.channel.toUpperCase()}</b> (~$${ladder.cost.toFixed(4)})`:`<b>${aiWants}</b>`} <span class="src ai">AI · simulated</span></div>
+        <div class="k">Policy evaluation</div><div>${pol.reason} <span class="src policy">deterministic</span></div>
+        <div class="k">Executed action</div><div><b>${executed}</b>${executed!==aiWants?` <span style="color:var(--block)">(AI overruled by policy)</span>`:''}</div>
+        <div class="k">Business outcome</div><div>${
+          executed==='contact'?`Message would be dispatched on ${ladder.channel.toUpperCase()}.`
+          :executed==='hold'?'No outbound — account held/opted-out. Collection suppressed.'
+          :executed==='escalate'?'Routed to a human specialist; no automated outbound.'
+          :executed==='wait'?'Deferred — courtesy limit (quiet hours / frequency). Will retry later.'
+          :'Closed — nothing owed or contact ceased.'}</div>
+      </div>
+    </div>
+    <div class="decision-card" style="border-color:#0f766e">
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Why this is a real safeguard</div>
+      <div style="font-size:13.5px;line-height:1.6">The block is produced by a <b>deterministic policy function</b>, evaluated <b>immediately before dispatch</b> — not by asking the model nicely. Even if the AI recommends <code>contact</code>, an opt-out / hold / restricted flag forces <code>${executed}</code>. In the deployed system this is <code>evaluateOutbound()</code> in <code>lib/shared/recovery-policy.ts</code>, enforced in the orchestrator and proactive-outreach Lambdas. <span class="tag live">LIVE-VERIFIED</span> on vf-dev-team5: an opted-out account returned <code>blocked / GLOBAL_OPT_OUT</code> while Bedrock recommended contact.</div>
+    </div>`;
+}
+
+/* ============================================================
+   EXECUTION EVIDENCE — AWS/tool/policy timeline, source-tagged.
+   ============================================================ */
+const EV=[
+  {t:'aws',h:'Inbound reply arrives',tag:'example',m:'Customer replies on WhatsApp → <code>AWS End User Messaging Social</code> webhook → <code>Amazon API Gateway</code>. (Device delivery via sandbox; API path real.)'},
+  {t:'tool',h:'Message triage',tag:'live',m:'<code>ra-message-triage</code> Lambda calls <code>Amazon Bedrock · Nova 2 Lite</code> → classifies intent/urgency/sentiment. LIVE-VERIFIED: hardship msg → <code>hardship / distressed / needsHuman</code>.'},
+  {t:'tool',h:'Agent orchestrator (Converse + tools)',tag:'live',m:'<code>ra-agent-orchestrator</code> runs the Bedrock Converse loop over 8 tools: <code>check_balance, offer_payment_plan, accept_payment_plan, record_promise_to_pay, apply_hardship, log_dispute, send_receipt, escalate_to_human</code>. (No <code>record_payment</code> tool exists — the agent never claims to charge funds.)'},
+  {t:'policy',h:'Deterministic policy gate',tag:'live',m:'<code>evaluateOutbound()</code> runs immediately before any dispatch. LIVE-VERIFIED on vf-dev-team5: opted-out account → <code>blocked / GLOBAL_OPT_OUT</code> even though the model recommended contact. The AI cannot override a denial.'},
+  {t:'aws',h:'Channel dispatch',tag:'example',m:'Authorized messages go out via <code>Amazon SES</code> (LIVE-VERIFIED email delivery), <code>AWS EUM SendTextMessage/SendRcsMessage</code>, <code>EUM Social SendWhatsAppMessage</code>. SMS/RCS/WhatsApp device delivery pending messaging-sandbox exit.'},
+  {t:'aws',h:'State + audit persisted',tag:'live',m:'<code>Amazon DynamoDB</code>: one cross-channel thread per customer; every decision written to <code>ra-decision-log</code> with policy reason code + executed action. LIVE-VERIFIED: 3 decision records persisted (2 ALLOWED/dispatched, 1 blocked).'},
+  {t:'tool',h:'Next-best-action (proactive)',tag:'live',m:'<code>ra-proactive-outreach</code> queries the <code>by-status</code> GSI (indexed, no table Scan), asks Bedrock for a next-best-action, re-checks policy, dispatches with per-day idempotency. LIVE-VERIFIED: scanned 3 past_due accounts, <code>source: "model"</code>.'},
+];
+function renderEvidence(){
+  document.getElementById('evTimeline').innerHTML=EV.map(e=>`
+    <div class="tl ${e.t}"><div class="h">${e.h}<span class="tag ${e.tag==='live'?'live':'example'}">${e.tag==='live'?'LIVE-VERIFIED':'EXAMPLE'}</span></div>
+    <div class="m">${e.m}</div></div>`).join('');
+}
+
+/* ── view switching + controls ── */
+function setView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.toggle('show',el.id===v));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
+  document.getElementById('guidedControls').style.display=v==='guided'?'flex':'none';
+  document.getElementById('counter').style.display=v==='guided'?'block':'none';
+  if(v==='lab') runLab();
+  if(v==='evidence') renderEvidence();
+}
+function toggleFs(){ if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}else{document.exitFullscreen&&document.exitFullscreen();} }
+
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('guided').classList.contains('show')) return;
+  if(e.key==='ArrowRight'||e.key===' ') { e.preventDefault(); go(1); }
+  if(e.key==='ArrowLeft') go(-1);
+  if(e.key==='p'||e.key==='P') togglePlay();
+});
+
+/* URL params: view, frame, autoplay, nofx */
+const qp=new URLSearchParams(location.search);
+if(qp.get('nofx')==='1'){const st=document.createElement('style');st.textContent='*{animation:none !important;transition:none !important}';document.head.appendChild(st);}
+renderGuided();
+const fr=qp.get('frame'); if(fr!==null){ i=Math.max(0,Math.min(frames.length-1,+fr-1)); renderGuided(); }
+const v=qp.get('view'); if(v&&['guided','lab','evidence'].includes(v)) setView(v);
+if(qp.get('autoplay')==='1'){ setView('guided'); startPlay(); }
 </script>
 </body>
 </html>
