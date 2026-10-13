@@ -43,17 +43,36 @@ export type IssueOutcome =
   | { issued: false; reason: 'not_authorized_for_customer' };
 
 /**
- * Issue a verification challenge for a channel identifier the caller wants to
- * link to `customerId`.
+ * A short-lived token proving the requester CONTROLS an existing verified
+ * channel of a customer — minted only by completing a fresh challenge on that
+ * channel (verifyCode returns one) or by an authenticated portal session.
+ * Knowing an identifier string is NOT proof; a valid session token is.
+ */
+export interface VerifiedSession {
+  customerId: string;
+  issuedAt: string;
+  expiresAt: string;
+}
+const SESSION_TTL_MS = 15 * 60 * 1000;
+export function mintSession(customerId: string, now: Date = new Date()): VerifiedSession {
+  return { customerId, issuedAt: now.toISOString(), expiresAt: new Date(now.getTime() + SESSION_TTL_MS).toISOString() };
+}
+function sessionProvesCustomer(session: VerifiedSession | undefined, customerId: string, now: Date): boolean {
+  return !!session && session.customerId === customerId && now.getTime() <= new Date(session.expiresAt).getTime();
+}
+
+/**
+ * Issue a verification challenge to link an identifier to `customerId`.
  *
- * AUTHORIZATION (anti-account-takeover): a caller cannot bind an identifier to
- * an EXISTING customer that already owns verified identifiers unless they prove
- * control of that customer by supplying `provenChannelIdentifier` — an
- * identifier ALREADY verified-linked to the same customerId. Issuing for a
- * brand-new/unclaimed customerId (self-service first verification) is allowed.
- *
- * This prevents a request with an attacker-chosen customerId from starting a
- * challenge that would attach a channel to someone else's account.
+ * AUTHORIZATION (anti-account-takeover):
+ *  - NEW / unclaimed customer (no verified identifiers yet) → self-service
+ *    enrollment is allowed. The caller SHOULD bind customerId to a trusted
+ *    account record upstream (see enrollment note in the Lambda); this function
+ *    does not mint identities out of thin air.
+ *  - EXISTING customer (already owns verified identifiers) → requires a
+ *    `verifiedSession` proving CURRENT control of an existing verified channel
+ *    (minted by a fresh verifyCode on that channel, or an authenticated portal
+ *    session). Merely supplying a known identifier string is NOT sufficient.
  */
 export async function issueChallenge(
   challengeStore: ChallengeStore,
@@ -61,22 +80,16 @@ export async function issueChallenge(
   channel: Channel,
   rawIdentifier: string,
   customerId: string,
-  provenChannelIdentifier?: string,
+  verifiedSession?: VerifiedSession,
   now: Date = new Date(),
   codeOverride?: string, // tests inject a known code
 ): Promise<IssueOutcome> {
   const channelIdentifier = normalizeIdentifier(channel, rawIdentifier);
 
-  // Does this customer already have ANY verified identifier?
   const customerClaimed = await identityStore.hasVerifiedForCustomer(customerId);
-  if (customerClaimed) {
-    // Must prove control of the existing customer.
-    if (!provenChannelIdentifier) return { issued: false, reason: 'not_authorized_for_customer' };
-    const proof = await identityStore.getLink(provenChannelIdentifier.trim().toLowerCase());
-    const proofRaw = proof ?? (await identityStore.getLink(provenChannelIdentifier.trim()));
-    if (!proofRaw || proofRaw.verification !== 'verified' || proofRaw.customerId !== customerId) {
-      return { issued: false, reason: 'not_authorized_for_customer' };
-    }
+  if (customerClaimed && !sessionProvesCustomer(verifiedSession, customerId, now)) {
+    // No fresh proof-of-control for an already-claimed customer → refuse.
+    return { issued: false, reason: 'not_authorized_for_customer' };
   }
 
   const code = codeOverride ?? generateCode();
@@ -95,7 +108,7 @@ export async function issueChallenge(
 }
 
 export type VerifyOutcome =
-  | { verified: true; customerId: string }
+  | { verified: true; customerId: string; session: VerifiedSession }
   | { verified: false; reason: 'no_challenge' | 'expired' | 'too_many_attempts' | 'wrong_code' };
 
 /**
@@ -139,7 +152,7 @@ export async function verifyCode(
     // Anti-takeover: identifier is owned by a different verified customer.
     return { verified: false, reason: 'wrong_code' };
   }
-  return { verified: true, customerId: challenge.customerId };
+  return { verified: true, customerId: challenge.customerId, session: mintSession(challenge.customerId, now) };
 }
 
 /** In-memory ChallengeStore for tests / local demo. */

@@ -69,13 +69,19 @@ export const handler: Handler = async (event) => {
   if (action === 'issue') {
     const customerId = String(event.customerId ?? '');
     if (!customerId) return { statusCode: 400, error: 'customerId is required to issue a challenge.' };
-    const provenChannelIdentifier = event.provenChannelIdentifier ? String(event.provenChannelIdentifier) : undefined;
+    // ENROLLMENT NOTE: for a NEW customer, the caller must bind customerId to a
+    // trusted account record upstream (e.g. the billing/CRM account that owns
+    // the past-due balance). This Lambda does not mint account ownership.
+    // For an EXISTING customer, a fresh verifiedSession (from a completed
+    // challenge on an already-verified channel, or an authenticated portal
+    // session) is REQUIRED — knowing an identifier is not proof of control.
+    const verifiedSession = event.verifiedSession as { customerId: string; issuedAt: string; expiresAt: string } | undefined;
 
-    const result = await issueChallenge(challengeStore, identityStore, channel, identifier, customerId, provenChannelIdentifier);
+    const result = await issueChallenge(challengeStore, identityStore, channel, identifier, customerId, verifiedSession);
     if (!result.issued) {
       console.log(JSON.stringify({ event: 'otp_issue_denied', channel, reason: result.reason }));
       return { statusCode: 403, issued: false, reason: result.reason,
-        error: 'Not authorized to link this identifier to an existing customer without proof of control (provenChannelIdentifier).' };
+        error: 'Not authorized: linking to an existing customer requires a fresh verifiedSession (proof of control of an existing verified channel).' };
     }
     const { channelIdentifier, code, expiresAt } = result;
 
