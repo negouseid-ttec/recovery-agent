@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Recovery Agent — Decision Log Dashboard</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111c30;--panel2:#0e1830;--line:#1f2d4a;--ink:#e8eefc;--muted:#8aa0c6;
+    --ai:#a78bfa;--policy:#38bdf8;--ok:#34d399;--block:#f87171;--amber:#fbbf24;--teal:#2dd4bf;
+    --sms:#f59e0b;--rcs:#2563eb;--wa:#25d366;--email:#0f766e;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+  a{color:var(--teal);}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 24px 60px;}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:8px;}
+  h1{font-size:24px;font-weight:900;}h1 .dot{color:var(--teal);}
+  .sub{font-size:13px;color:var(--muted);margin-top:4px;max-width:720px;line-height:1.5;}
+  .srcpill{font-size:11px;font-weight:800;letter-spacing:.04em;padding:5px 12px;border-radius:999px;white-space:nowrap;}
+  .srcpill.sample{background:rgba(251,191,36,.12);color:var(--amber);border:1px solid var(--amber);}
+  .srcpill.live{background:rgba(52,211,153,.14);color:var(--ok);border:1px solid var(--ok);}
+  .banner{background:rgba(56,189,248,.08);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:12.5px;color:var(--muted);line-height:1.6;margin:16px 0 22px;}
+  .banner code{background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--ink);font-family:ui-monospace,Menlo,monospace;}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:22px;}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;}
+  .tile .k{font-size:30px;font-weight:900;letter-spacing:-.02em;}
+  .tile .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:4px;}
+  .tile.ok .k{color:var(--ok);}.tile.block .k{color:var(--block);}.tile.ai .k{color:var(--ai);}.tile.cost .k{color:var(--teal);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+  .card h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;}
+  .bar{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px;}
+  .bar .lab{width:160px;flex:0 0 160px;color:var(--ink);}
+  .bar .track{flex:1;height:16px;background:var(--panel2);border-radius:8px;overflow:hidden;}
+  .bar .fill{height:100%;border-radius:8px;}
+  .bar .n{width:38px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;}
+  .rc-ALLOWED{background:var(--ok);} .rc-block{background:var(--block);}
+  .ch-email{background:var(--email);}.ch-sms{background:var(--sms);}.ch-rcs{background:var(--rcs);}.ch-whatsapp{background:var(--wa);}.ch-none{background:#475569;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .card.tablecard{padding:0;overflow:hidden;}
+  .card.tablecard h3{padding:18px 20px 0;}
+  th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);position:sticky;top:0;background:var(--panel);}
+  .tscroll{max-height:420px;overflow:auto;}
+  .pill{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap;}
+  .pill.ok{background:rgba(52,211,153,.14);color:var(--ok);border:1px solid var(--ok);}
+  .pill.block{background:rgba(248,113,113,.14);color:var(--block);border:1px solid var(--block);}
+  .pill.skip{background:rgba(148,163,184,.14);color:var(--muted);border:1px solid #475569;}
+  .pill.ai{background:rgba(167,139,250,.14);color:var(--ai);border:1px solid var(--ai);}
+  .pill.heur{background:rgba(56,189,248,.12);color:var(--policy);border:1px solid var(--policy);}
+  .mono{font-family:ui-monospace,Menlo,monospace;}
+  td .reason{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.4;}
+  .tagrow{margin-top:3px;}
+  .srctag{font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;}
+  .srctag.live{background:rgba(52,211,153,.14);color:var(--ok);}
+  .srctag.ex{background:rgba(251,191,36,.12);color:var(--amber);}
+  footer{margin-top:24px;font-size:11.5px;color:var(--muted);line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>💸 Recovery Agent — Decision Log<span class="dot">.</span></h1>
+      <div class="sub">Every autonomous decision the agent makes is written to the <code>ra-decision-log</code> DynamoDB table: the signals it saw, what Amazon Bedrock recommended, how the deterministic policy engine ruled, what actually executed, and the cost. This page renders that log — so a cloner can see the real output of their agent's actions.</div>
+    </div>
+    <span class="srcpill" id="srcpill">—</span>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid2">
+    <div class="card"><h3>Policy outcomes · by reason code</h3><div id="policyBreak"></div></div>
+    <div class="card"><h3>Channel of executed outreach</h3><div id="channelBreak"></div></div>
+  </div>
+
+  <div class="card tablecard">
+    <h3>Decision records (<span id="rowcount">0</span>)</h3>
+    <div class="tscroll"><table>
+      <thead><tr><th>Decision</th><th>Account · signals</th><th>AI recommendation</th><th>Policy</th><th>Executed · result</th><th>Cost</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </div>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+/* ============================================================
+   DATA ADAPTER
+   Renders DecisionLogEntry[] (lib/shared/types.ts). Ships with
+   REAL records captured live from ra-decision-log on vf-dev-team5
+   plus a few clearly-labeled EXAMPLE rows to show the full range
+   of policy outcomes. To view YOUR live data after cloning + deploy:
+
+     aws dynamodb scan --table-name ra-decision-log \
+       --output json | node demo/tools/declog-to-json.js > mylog.json
+     open "dashboard.html?src=mylog.json"
+
+   (?src=<url> fetches a JSON array of DecisionLogEntry and renders it,
+    labeled LIVE. No backend is implied; it's a static fetch.)
+   ============================================================ */
+
+// REAL records captured from ra-decision-log (vf-dev-team5, 2026-10-12).
+const LIVE_CAPTURED = [
+  {decisionId:"DEC-fb637fa4",accountId:"ACCT-B",createdAt:"2026-10-12T15:57:01.531Z",correlationId:"OUT-078b92e5",
+   signals:{status:"past_due",pastDueCents:62000,daysPastDue:45,attempts:4},
+   recommendation:{action:"contact",channel:"rcs",confidence:0.95,confidenceBasis:"model",expectedCostUsd:0.012,
+     reason:"Account is severely overdue ($620) after 4 attempts without response; RCS is available and cost-effective for engagement."},
+   policyDecision:{allowed:true,reasonCode:"ALLOWED",reason:"Outbound permitted by policy.",constraints:{channel:"rcs"}},
+   executedAction:"contact",executionResult:"dispatched",estCostUsd:0.012,modelId:"us.amazon.nova-2-lite-v1:0",
+   tokenUsage:{input:304,output:80},summary:"model: recommend contact/rcs → executed contact (ALLOWED)",_src:"live"},
+  {decisionId:"DEC-59cebd72",accountId:"ACCT-A",createdAt:"2026-10-12T15:57:01.531Z",correlationId:"OUT-078b92e5",
+   signals:{status:"past_due",pastDueCents:4200,daysPastDue:5},
+   policyDecision:{allowed:false,reasonCode:"MIN_INTERVAL",reason:"Too soon since the last outreach attempt.",constraints:{elapsedMs:299310,minIntervalMs:72000000}},
+   executedAction:"skip",executionResult:"blocked",summary:"Blocked before outreach: MIN_INTERVAL",_src:"live"},
+  {decisionId:"DEC-67dd0021",accountId:"ACCT-C",createdAt:"2026-10-12T15:57:01.531Z",correlationId:"OUT-078b92e5",
+   signals:{status:"past_due",pastDueCents:3000,daysPastDue:12},
+   policyDecision:{allowed:false,reasonCode:"MIN_INTERVAL",reason:"Too soon since the last outreach attempt.",constraints:{elapsedMs:299310,minIntervalMs:72000000}},
+   executedAction:"skip",executionResult:"blocked",summary:"Blocked before outreach: MIN_INTERVAL",_src:"live"},
+];
+
+// EXAMPLE rows (clearly labeled) to show the full range of outcomes.
+const EXAMPLES = [
+  {decisionId:"DEC-ex-optout",accountId:"ACCT-OPT",createdAt:"2026-10-12T16:04:00.000Z",correlationId:"OUT-ex",
+   signals:{status:"past_due",pastDueCents:8400,daysPastDue:32},
+   recommendation:{action:"contact",channel:"sms",confidence:0.9,confidenceBasis:"model",expectedCostUsd:0.0075,reason:"Overdue with no engagement; SMS is the next ladder step."},
+   policyDecision:{allowed:false,reasonCode:"GLOBAL_OPT_OUT",reason:"Customer has globally opted out of all contact."},
+   executedAction:"hold",executionResult:"blocked",modelId:"us.amazon.nova-2-lite-v1:0",
+   summary:"model wanted contact/sms → policy BLOCKED (GLOBAL_OPT_OUT) → executed hold",_src:"ex"},
+  {decisionId:"DEC-ex-hardship",accountId:"ACCT-HARD",createdAt:"2026-10-12T16:05:00.000Z",correlationId:"OUT-ex",
+   signals:{status:"hardship_hold",pastDueCents:8400,daysPastDue:40},
+   policyDecision:{allowed:false,reasonCode:"HARDSHIP_HOLD",reason:"Account is under a hardship hold; collection outreach suppressed."},
+   executedAction:"hold",executionResult:"blocked",summary:"Hardship hold — collection suppressed",_src:"ex"},
+  {decisionId:"DEC-ex-email",accountId:"ACCT-D",createdAt:"2026-10-12T16:06:00.000Z",correlationId:"OUT-ex",
+   signals:{status:"past_due",pastDueCents:2200,daysPastDue:3,attempts:0},
+   recommendation:{action:"contact",channel:"email",confidence:0.5,confidenceBasis:"heuristic",expectedCostUsd:0.0001,reason:"Heuristic ladder: first touch on the cheapest channel (EMAIL)."},
+   policyDecision:{allowed:true,reasonCode:"ALLOWED",reason:"Outbound permitted by policy.",constraints:{channel:"email"}},
+   executedAction:"contact",executionResult:"dispatched",estCostUsd:0.0001,summary:"heuristic-fallback: contact/email (ALLOWED)",_src:"ex"},
+];
+
+const $=id=>document.getElementById(id);
+const money=n=>'$'+(n||0).toFixed(4);
+const CH_COLORS={email:'ch-email',sms:'ch-sms',rcs:'ch-rcs',whatsapp:'ch-whatsapp',none:'ch-none'};
+
+async function load(){
+  const src=new URLSearchParams(location.search).get('src');
+  if(src){
+    try{
+      const r=await fetch(src); const data=await r.json();
+      const rows=Array.isArray(data)?data:(data.Items||data.records||[]);
+      rows.forEach(x=>x._src='live');
+      render(rows,'live',`Live data from <code>${src}</code> — ${rows.length} decision records exported from your <code>ra-decision-log</code>.`);
+      return;
+    }catch(e){ /* fall through to bundled */ }
+  }
+  const rows=[...LIVE_CAPTURED,...EXAMPLES];
+  render(rows,'sample',
+    `Showing <b>bundled data</b>: ${LIVE_CAPTURED.length} <span style="color:var(--ok)">LIVE-CAPTURED</span> records (real, scanned from <code>ra-decision-log</code> on vf-dev-team5) + ${EXAMPLES.length} <span style="color:var(--amber)">EXAMPLE</span> records illustrating opt-out / hardship / heuristic outcomes. Clone, deploy, run the agent, then <code>?src=yourlog.json</code> to render YOUR live decisions.`);
+}
+
+function render(rows,mode,bannerHtml){
+  $('srcpill').textContent = mode==='live' ? '● LIVE DATA' : '◐ BUNDLED SAMPLE';
+  $('srcpill').className = 'srcpill '+(mode==='live'?'live':'sample');
+  $('banner').innerHTML = bannerHtml;
+  $('rowcount').textContent = rows.length;
+
+  const total=rows.length;
+  const dispatched=rows.filter(r=>r.executionResult==='dispatched').length;
+  const blocked=rows.filter(r=>r.executionResult==='blocked').length;
+  const modelN=rows.filter(r=>r.recommendation&&r.recommendation.confidenceBasis==='model').length;
+  const cost=rows.reduce((a,r)=>a+(r.estCostUsd||0),0);
+
+  $('tiles').innerHTML=[
+    tile(total,'Decisions logged',''),
+    tile(dispatched,'Dispatched','ok'),
+    tile(blocked,'Blocked by policy','block'),
+    tile(modelN,'AI (Bedrock) recs','ai'),
+    tile(money(cost),'Est. messaging cost','cost'),
+  ].join('');
+
+  // policy reason-code breakdown
+  const byCode={};
+  rows.forEach(r=>{const c=r.policyDecision.reasonCode;byCode[c]=(byCode[c]||0)+1;});
+  const maxC=Math.max(1,...Object.values(byCode));
+  $('policyBreak').innerHTML=Object.entries(byCode).sort((a,b)=>b[1]-a[1]).map(([c,n])=>
+    `<div class="bar"><span class="lab mono">${c}</span><div class="track"><div class="fill ${c==='ALLOWED'?'rc-ALLOWED':'rc-block'}" style="width:${n/maxC*100}%"></div></div><span class="n">${n}</span></div>`).join('');
+
+  // channel of executed outreach (dispatched only)
+  const byCh={};
+  rows.filter(r=>r.executionResult==='dispatched'&&r.recommendation).forEach(r=>{const ch=r.recommendation.channel;byCh[ch]=(byCh[ch]||0)+1;});
+  const maxCh=Math.max(1,...Object.values(byCh));
+  $('channelBreak').innerHTML=Object.keys(byCh).length?Object.entries(byCh).sort((a,b)=>b[1]-a[1]).map(([ch,n])=>
+    `<div class="bar"><span class="lab">${ch.toUpperCase()}</span><div class="track"><div class="fill ${CH_COLORS[ch]||'ch-none'}" style="width:${n/maxCh*100}%"></div></div><span class="n">${n}</span></div>`).join('')
+    : `<div class="sub">No dispatched outreach in this dataset (all held/blocked).</div>`;
+
+  // decision table
+  $('rows').innerHTML=rows.map(r=>{
+    const pol=r.policyDecision, allowed=pol.allowed;
+    const rec=r.recommendation;
+    const resClass=r.executionResult==='dispatched'?'ok':r.executionResult==='blocked'?'block':'skip';
+    const sig=r.signals||{};
+    const sigStr=`${sig.status||''}${sig.pastDueCents!=null?' · $'+(sig.pastDueCents/100).toFixed(0):''}${sig.daysPastDue!=null?' · '+sig.daysPastDue+'d overdue':''}${sig.attempts!=null?' · '+sig.attempts+' attempts':''}`;
+    return `<tr>
+      <td><span class="mono">${r.decisionId}</span><div class="tagrow"><span class="srctag ${r._src==='live'?'live':'ex'}">${r._src==='live'?'LIVE-CAPTURED':'EXAMPLE'}</span></div></td>
+      <td><b>${r.accountId||'—'}</b><div class="reason">${sigStr}</div></td>
+      <td>${rec?`${rec.action} · <b>${(rec.channel||'none').toUpperCase()}</b> <span class="pill ${rec.confidenceBasis==='model'?'ai':'heur'}">${rec.confidenceBasis}</span><div class="reason">${esc(rec.reason||'')}</div>`:'<span class="reason">— (blocked pre-recommendation)</span>'}</td>
+      <td><span class="pill ${allowed?'ok':'block'}">${pol.reasonCode}</span><div class="reason">${esc(pol.reason||'')}</div></td>
+      <td><b>${r.executedAction}</b> <span class="pill ${resClass}">${r.executionResult}</span></td>
+      <td class="mono">${r.estCostUsd!=null?money(r.estCostUsd):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  $('footer').innerHTML=`Model: <span class="mono">us.amazon.nova-2-lite-v1:0</span> · The AI recommends, the deterministic policy engine authorizes — the model can never override a policy denial. Decision records are TTL-expiring and store a concise summary only (never model chain-of-thought). Source: <code>ra-decision-log</code> (lib/shared/decision-audit.ts).`;
+}
+function tile(k,l,cls){return `<div class="tile ${cls||''}"><div class="k">${k}</div><div class="l">${l}</div></div>`;}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+load();
+</script>
+</body>
+</html>
