@@ -14,8 +14,8 @@
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;background:var(--bg);overflow:hidden;font-family:'Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);}
   /* 1920x1080 fixed stage, scaled to fit the viewport */
-  #scaler{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);}
-  #stage{position:relative;width:1920px;height:1080px;transform-origin:center center;
+  #scaler{position:fixed;inset:0;overflow:hidden;background:var(--bg);}
+  #stage{position:absolute;top:0;left:0;width:1920px;height:1080px;transform-origin:top left;
     background:radial-gradient(1200px 700px at 50% 42%, #0c1733 0%, #070D1B 70%);overflow:hidden;}
   .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(80,120,200,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(80,120,200,.06) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(circle at 50% 45%,#000 55%,transparent 85%);animation:drift 24s linear infinite;}
   @keyframes drift{from{background-position:0 0,0 0;}to{background-position:48px 48px,48px 48px;}}
@@ -39,6 +39,7 @@
   .node.ok.pulse{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok),0 0 34px rgba(52,211,153,.45);}
   .node.block.pulse{border-color:var(--block);box-shadow:0 0 0 1px var(--block),0 0 40px rgba(248,113,113,.55);}
   .node.cds.pulse{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal),0 0 34px rgba(45,212,191,.45);}
+  .node.cds{width:210px;min-width:0;}
 
   /* central hero */
   #agent{left:760px;top:430px;width:400px;min-height:200px;background:linear-gradient(160deg,#122048,#0b1430);border:1.5px solid #2b3f70;border-radius:24px;padding:22px 24px;text-align:center;}
@@ -112,12 +113,12 @@
     <path id="p_hist"  class="path-base" d="M 430 560 C 600 560, 650 540, 760 545"/>
     <path id="p_chan"  class="path-base" d="M 430 690 C 610 660, 650 580, 760 565"/>
     <!-- agent → channels (right) -->
-    <path id="p_ses"   class="path-base path-live" d="M 1160 480 C 1300 450, 1340 300, 1420 300"/>
-    <path id="p_sms"   class="path-base path-live" d="M 1160 510 C 1300 500, 1340 430, 1420 430"/>
-    <path id="p_rcs"   class="path-base path-live" d="M 1160 540 C 1300 560, 1340 560, 1420 560"/>
-    <path id="p_wa"    class="path-base path-live" d="M 1160 570 C 1300 600, 1340 690, 1420 690"/>
+    <path id="p_ses"   class="path-base path-live" d="M 1160 480 C 1320 450, 1380 300, 1470 300"/>
+    <path id="p_sms"   class="path-base path-live" d="M 1160 510 C 1330 500, 1380 430, 1470 430"/>
+    <path id="p_rcs"   class="path-base path-live" d="M 1160 540 C 1330 560, 1380 560, 1470 560"/>
+    <path id="p_wa"    class="path-base path-live" d="M 1160 570 C 1320 600, 1380 690, 1470 690"/>
     <!-- feedback loop (bottom) -->
-    <path id="p_fb"    class="path-base" d="M 1430 700 C 1080 980, 820 980, 760 600"/>
+    <path id="p_fb"    class="path-base" d="M 1480 700 C 1080 980, 820 980, 760 600"/>
     <!-- agent → audit -->
     <path id="p_audit" class="path-base path-policy" d="M 960 640 C 960 760, 960 800, 960 840"/>
     <!-- traveling particles -->
@@ -147,10 +148,10 @@
   <div class="verdict block" id="v_block" style="left:1180px;top:600px;">POLICY: BLOCKED — GLOBAL_OPT_OUT</div>
 
   <!-- RIGHT CDS channels -->
-  <div class="node cds" id="n_ses" style="left:1430px;top:276px;"><div class="t">📧 Email</div><div class="svc">Amazon SES</div></div>
-  <div class="node cds" id="n_sms" style="left:1430px;top:406px;"><div class="t">📱 SMS</div><div class="svc">AWS End User Messaging</div></div>
-  <div class="node cds" id="n_rcs" style="left:1430px;top:536px;"><div class="t">💬 RCS</div><div class="svc">AWS End User Messaging</div></div>
-  <div class="node cds" id="n_wa"  style="left:1430px;top:666px;"><div class="t">📲 WhatsApp</div><div class="svc">AWS EUM Social</div></div>
+  <div class="node cds" id="n_ses" style="left:1480px;top:276px;"><div class="t">📧 Email</div><div class="svc">Amazon SES</div></div>
+  <div class="node cds" id="n_sms" style="left:1480px;top:406px;"><div class="t">📱 SMS</div><div class="svc">AWS End User Messaging</div></div>
+  <div class="node cds" id="n_rcs" style="left:1480px;top:536px;"><div class="t">💬 RCS</div><div class="svc">AWS End User Messaging</div></div>
+  <div class="node cds" id="n_wa"  style="left:1480px;top:666px;"><div class="t">📲 WhatsApp</div><div class="svc">AWS EUM Social</div></div>
 
   <!-- audit -->
   <div class="node policy" id="n_audit" style="left:830px;top:840px;width:260px;"><div class="t">🗒 Decision audit log</div><div class="s">Every decision explainable · Amazon DynamoDB</div></div>
@@ -192,7 +193,14 @@ if(NOFX){ $('grid').style.display='none'; }
 if(qp.get('clean')==='1'){ $('ctl').classList.add('hidden'); $('hideHint').classList.add('hidden'); }
 
 /* fit 1920x1080 into viewport */
-function fit(){ const s=Math.min(innerWidth/1920,innerHeight/1080); $('stage').style.transform=`scale(${s})`; }
+function fit(){
+  const s=Math.min(innerWidth/1920,innerHeight/1080);
+  const st=$('stage');
+  st.style.transform=`scale(${s})`;
+  // Center the SCALED box in the viewport (transform-origin is top-left).
+  st.style.left=Math.round((innerWidth-1920*s)/2)+'px';
+  st.style.top=Math.round((innerHeight-1080*s)/2)+'px';
+}
 addEventListener('resize',fit); fit();
 
 /* helpers */
