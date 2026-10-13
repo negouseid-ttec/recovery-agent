@@ -6,6 +6,7 @@ import {
   issueChallenge,
   verifyCode,
   generateCode,
+  mintSession,
   InMemoryChallengeStore,
 } from '../lib/shared/identity-verification';
 import { InMemoryIdentityStore, resolveIdentity } from '../lib/shared/identity';
@@ -13,9 +14,9 @@ import { InMemoryIdentityStore, resolveIdentity } from '../lib/shared/identity';
 const now = new Date('2026-10-12T16:00:00Z');
 function stores() { return { cs: new InMemoryChallengeStore(), is: new InMemoryIdentityStore() }; }
 
-/** New-customer (unclaimed) issue — no proof needed. */
-async function issue(cs: InMemoryChallengeStore, is: InMemoryIdentityStore, channel: any, id: string, cust: string, code: string, proven?: string) {
-  return issueChallenge(cs, is, channel, id, cust, proven, now, code);
+/** Issue helper (new-customer path needs no session; existing needs one). */
+async function issue(cs: InMemoryChallengeStore, is: InMemoryIdentityStore, channel: any, id: string, cust: string, code: string, session?: any) {
+  return issueChallenge(cs, is, channel, id, cust, session, now, code);
 }
 
 describe('generateCode', () => {
@@ -36,10 +37,11 @@ describe('issue + verify happy path', () => {
     expect(resolved.customerId).toBe('CUST-DANA');
   });
 
-  test('cross-channel link with PROOF of control of the existing customer', async () => {
+  test('cross-channel link with a fresh verifiedSession (proof of control)', async () => {
     const { cs, is } = stores();
     is.seedVerified('sms', '+15551230001', 'CUST-DANA'); // existing verified channel
-    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '222222', '+15551230001');
+    const session = mintSession('CUST-DANA', now); // from a completed fresh challenge
+    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '222222', session);
     expect(iss.issued).toBe(true);
     const out = await verifyCode(cs, is, 'email', 'dana@example.com', '222222', now);
     expect(out.verified).toBe(true);
@@ -47,22 +49,42 @@ describe('issue + verify happy path', () => {
     const viaSms = await resolveIdentity(is, 'sms', '+15551230001');
     expect(viaEmail.customerId).toBe(viaSms.customerId);
   });
+
+  test('verifyCode returns a session usable to link the next channel', async () => {
+    const { cs, is } = stores();
+    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '111111'); // new customer self-enroll
+    const first = await verifyCode(cs, is, 'sms', '+15551230001', '111111', now);
+    expect(first.verified).toBe(true);
+    if (!first.verified) return;
+    // Use the returned session to add email to the now-existing customer.
+    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '333333', first.session);
+    expect(iss.issued).toBe(true);
+  });
 });
 
 describe('ISSUE authorization (anti-takeover at issuance)', () => {
-  test('cannot issue for an EXISTING customer without proof of control', async () => {
+  test('cannot issue for an EXISTING customer without a verifiedSession', async () => {
     const { cs, is } = stores();
     is.seedVerified('sms', '+15551230001', 'CUST-DANA');
-    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456'); // no proof
+    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456'); // no session
     expect(iss.issued).toBe(false);
     if (!iss.issued) expect(iss.reason).toBe('not_authorized_for_customer');
   });
 
-  test('cannot issue with proof that belongs to a DIFFERENT customer', async () => {
+  test('knowing an identifier is NOT enough — only a fresh session works', async () => {
     const { cs, is } = stores();
     is.seedVerified('sms', '+15551230001', 'CUST-DANA');
-    is.seedVerified('sms', '+15552220002', 'CUST-BOB'); // attacker proves Bob, targets Dana
-    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456', '+15552220002');
+    // Attacker knows Dana's verified number but has no session for her.
+    const sessionForBob = mintSession('CUST-BOB', now);
+    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456', sessionForBob);
+    expect(iss.issued).toBe(false);
+  });
+
+  test('an EXPIRED session is rejected', async () => {
+    const { cs, is } = stores();
+    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
+    const stale = mintSession('CUST-DANA', new Date(now.getTime() - 20 * 60 * 1000)); // 20 min old (>15m TTL)
+    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '123456', stale);
     expect(iss.issued).toBe(false);
   });
 

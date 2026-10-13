@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Recovery Agent — Architecture</title>
+<style>
+  :root{
+    --bg:#070D1B; --ink:#e8eefc; --muted:#8aa0c6;
+    --cyan:#22d3ee; --violet:#a78bfa; --teal:#2dd4bf; --amber:#fbbf24;
+    --ok:#34d399; --block:#f87171; --aws:#ff9900;
+    --card:#0e1830; --cardln:#1e2d4d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--bg);overflow:hidden;font-family:'Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);}
+  /* 1920x1080 fixed stage, scaled to fit the viewport */
+  #scaler{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);}
+  #stage{position:relative;width:1920px;height:1080px;transform-origin:center center;
+    background:radial-gradient(1200px 700px at 50% 42%, #0c1733 0%, #070D1B 70%);overflow:hidden;}
+  .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(80,120,200,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(80,120,200,.06) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(circle at 50% 45%,#000 55%,transparent 85%);animation:drift 24s linear infinite;}
+  @keyframes drift{from{background-position:0 0,0 0;}to{background-position:48px 48px,48px 48px;}}
+  .vignette{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 300px rgba(0,0,0,.65);}
+
+  svg{position:absolute;inset:0;width:1920px;height:1080px;}
+  .path-base{fill:none;stroke:rgba(130,160,220,.18);stroke-width:2;}
+  .path-ai{stroke:rgba(167,139,250,.25);}
+  .path-policy{stroke:rgba(34,211,238,.25);}
+  .path-live{stroke:rgba(45,212,191,.25);}
+
+  .node{position:absolute;background:var(--card);border:1px solid var(--cardln);border-radius:16px;padding:14px 18px;min-width:180px;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:.35;transition:opacity .6s ease,box-shadow .6s ease,border-color .6s ease,transform .6s ease;}
+  .node .t{font-size:16px;font-weight:800;letter-spacing:.01em;}
+  .node .s{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;}
+  .node .svc{font-size:10.5px;color:var(--aws);font-weight:700;letter-spacing:.04em;margin-top:6px;text-transform:uppercase;}
+  .node.on{opacity:1;}
+  .node.pulse{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 0 34px rgba(34,211,238,.4),0 10px 30px rgba(0,0,0,.5);}
+  .node.ai.pulse{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet),0 0 34px rgba(167,139,250,.45);}
+  .node.policy.pulse{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 0 34px rgba(34,211,238,.45);}
+  .node.ok.pulse{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok),0 0 34px rgba(52,211,153,.45);}
+  .node.block.pulse{border-color:var(--block);box-shadow:0 0 0 1px var(--block),0 0 40px rgba(248,113,113,.55);}
+  .node.cds.pulse{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal),0 0 34px rgba(45,212,191,.45);}
+
+  /* central hero */
+  #agent{left:760px;top:430px;width:400px;min-height:200px;background:linear-gradient(160deg,#122048,#0b1430);border:1.5px solid #2b3f70;border-radius:24px;padding:22px 24px;text-align:center;}
+  #agent .t{font-size:30px;font-weight:900;background:linear-gradient(90deg,#22d3ee,#a78bfa,#2dd4bf);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  #agent .s{font-size:13px;color:var(--muted);margin-top:4px;letter-spacing:.08em;text-transform:uppercase;}
+  #agent .funcs{display:flex;gap:10px;margin-top:16px;}
+  .func{flex:1;background:rgba(10,18,38,.7);border:1px solid #223c6b;border-radius:12px;padding:10px 8px;opacity:.5;transition:opacity .5s,border-color .5s,box-shadow .5s;}
+  .func.on{opacity:1;}
+  .func .fh{font-size:12px;font-weight:800;}
+  .func .fd{font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.3;}
+  .func.ai .fh{color:var(--violet);} .func.policy .fh{color:var(--cyan);} .func.tools .fh{color:var(--teal);}
+  .func.ai.lit{border-color:var(--violet);box-shadow:0 0 22px rgba(167,139,250,.35);}
+  .func.policy.lit{border-color:var(--cyan);box-shadow:0 0 22px rgba(34,211,238,.35);}
+  .func.tools.lit{border-color:var(--teal);box-shadow:0 0 22px rgba(45,212,191,.35);}
+  .halo{position:absolute;left:50%;top:50%;width:520px;height:320px;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,rgba(90,130,255,.18),transparent 68%);opacity:0;transition:opacity 1s;}
+  #agent.woke .halo{opacity:1;animation:breathe 5s ease-in-out infinite;}
+  @keyframes breathe{0%,100%{transform:translate(-50%,-50%) scale(1);}50%{transform:translate(-50%,-50%) scale(1.06);}}
+
+  /* particles */
+  .pkt{fill:#fff;filter:drop-shadow(0 0 6px #22d3ee);opacity:0;}
+  .pkt.ai{filter:drop-shadow(0 0 6px #a78bfa);}
+  .pkt.ok{filter:drop-shadow(0 0 7px #34d399);}
+  .pkt.block{filter:drop-shadow(0 0 8px #f87171);}
+  .pkt.cds{filter:drop-shadow(0 0 7px #2dd4bf);}
+
+  /* captions */
+  #caption{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);text-align:center;max-width:1100px;opacity:0;transition:opacity .6s;}
+  #caption .big{font-size:34px;font-weight:800;letter-spacing:-.01em;}
+  #caption .small{font-size:17px;color:var(--muted);margin-top:8px;}
+  #caption.show{opacity:1;}
+  .verdict{position:absolute;padding:8px 20px;border-radius:12px;font-size:20px;font-weight:900;letter-spacing:.03em;opacity:0;transition:opacity .4s,transform .4s;}
+  .verdict.show{opacity:1;}
+  .verdict.ok{color:var(--ok);background:rgba(52,211,153,.12);border:1px solid var(--ok);}
+  .verdict.block{color:var(--block);background:rgba(248,113,113,.14);border:1px solid var(--block);}
+
+  #title{position:absolute;left:0;right:0;top:46%;transform:translateY(-50%);text-align:center;opacity:0;transition:opacity 1s;pointer-events:none;}
+  #title.show{opacity:1;}
+  #title .brand{font-size:72px;font-weight:900;letter-spacing:.02em;background:linear-gradient(90deg,#22d3ee,#a78bfa,#2dd4bf);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  #title .tag{font-size:26px;color:var(--ink);margin-top:14px;font-weight:600;}
+
+  .colhdr{position:absolute;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);opacity:.6;}
+
+  /* controls */
+  #ctl{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:rgba(8,14,28,.9);border:1px solid #1e2d4d;border-radius:12px;padding:8px 12px;z-index:50;}
+  #ctl button,#ctl select{background:#12203f;color:var(--ink);border:1px solid #243a66;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+  #ctl button:hover{border-color:var(--cyan);}
+  #ctl .sc{font-size:12px;color:var(--muted);min-width:150px;text-align:center;}
+  #hideHint{position:fixed;bottom:16px;right:16px;font-size:11px;color:#44557a;z-index:50;}
+  .hidden{display:none !important;}
+  @media (prefers-reduced-motion: reduce){.grid{animation:none;}#agent.woke .halo{animation:none;}}
+</style>
+</head>
+<body>
+<div id="scaler"><div id="stage">
+  <div class="grid" id="grid"></div>
+  <div class="vignette"></div>
+
+  <div class="colhdr" style="left:150px;top:120px;">Telecom customer context</div>
+  <div class="colhdr" style="left:50%;top:120px;transform:translateX(-50%);">Recovery Agent — decision intelligence</div>
+  <div class="colhdr" style="right:150px;top:120px;">AWS Communication Developer Services</div>
+
+  <!-- SVG network -->
+  <svg id="net" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="gAI" x1="0" x2="1"><stop offset="0" stop-color="#a78bfa"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    </defs>
+    <!-- left context → agent -->
+    <path id="p_acct"  class="path-base" d="M 430 300 C 600 320, 640 470, 760 500"/>
+    <path id="p_pref"  class="path-base" d="M 430 420 C 600 440, 650 500, 760 520"/>
+    <path id="p_hist"  class="path-base" d="M 430 560 C 600 560, 650 540, 760 545"/>
+    <path id="p_chan"  class="path-base" d="M 430 690 C 610 660, 650 580, 760 565"/>
+    <!-- agent → channels (right) -->
+    <path id="p_ses"   class="path-base path-live" d="M 1160 480 C 1300 450, 1340 300, 1420 300"/>
+    <path id="p_sms"   class="path-base path-live" d="M 1160 510 C 1300 500, 1340 430, 1420 430"/>
+    <path id="p_rcs"   class="path-base path-live" d="M 1160 540 C 1300 560, 1340 560, 1420 560"/>
+    <path id="p_wa"    class="path-base path-live" d="M 1160 570 C 1300 600, 1340 690, 1420 690"/>
+    <!-- feedback loop (bottom) -->
+    <path id="p_fb"    class="path-base" d="M 1430 700 C 1080 980, 820 980, 760 600"/>
+    <!-- agent → audit -->
+    <path id="p_audit" class="path-base path-policy" d="M 960 640 C 960 760, 960 800, 960 840"/>
+    <!-- traveling particles -->
+    <circle class="pkt" id="pk1" r="5"/>
+    <circle class="pkt" id="pk2" r="5"/>
+    <circle class="pkt" id="pk3" r="5"/>
+  </svg>
+
+  <!-- LEFT context nodes -->
+  <div class="node" id="n_acct" style="left:220px;top:260px;"><div class="t">Past-due account</div><div class="s">$84 past due · 32 days · suspends in 10</div></div>
+  <div class="node" id="n_pref" style="left:220px;top:390px;"><div class="t">Customer preferences</div><div class="s">Preferred channel · opt-outs</div></div>
+  <div class="node" id="n_hist" style="left:220px;top:520px;"><div class="t">Conversation history</div><div class="s">One cross-channel thread</div></div>
+  <div class="node" id="n_chan" style="left:220px;top:650px;"><div class="t">Channel availability</div><div class="s">Device + reachability signals</div></div>
+
+  <!-- CENTER hero -->
+  <div class="node" id="agent">
+    <div class="halo"></div>
+    <div class="t">Recovery Agent</div>
+    <div class="s">Autonomous Decision Intelligence</div>
+    <div class="funcs">
+      <div class="func ai" id="f_ai"><div class="fh">Amazon Bedrock</div><div class="fd">Nova 2 Lite — recommends next best action</div></div>
+      <div class="func policy" id="f_policy"><div class="fh">Policy Engine</div><div class="fd">Deterministic — validates &amp; can block</div></div>
+      <div class="func tools" id="f_tools"><div class="fh">Recovery Tools</div><div class="fd">Plans · hardship · dispute · escalate</div></div>
+    </div>
+  </div>
+  <div class="verdict ok" id="v_ok" style="left:1180px;top:430px;">POLICY: ALLOWED</div>
+  <div class="verdict block" id="v_block" style="left:1180px;top:600px;">POLICY: BLOCKED — GLOBAL_OPT_OUT</div>
+
+  <!-- RIGHT CDS channels -->
+  <div class="node cds" id="n_ses" style="left:1430px;top:276px;"><div class="t">📧 Email</div><div class="svc">Amazon SES</div></div>
+  <div class="node cds" id="n_sms" style="left:1430px;top:406px;"><div class="t">📱 SMS</div><div class="svc">AWS End User Messaging</div></div>
+  <div class="node cds" id="n_rcs" style="left:1430px;top:536px;"><div class="t">💬 RCS</div><div class="svc">AWS End User Messaging</div></div>
+  <div class="node cds" id="n_wa"  style="left:1430px;top:666px;"><div class="t">📲 WhatsApp</div><div class="svc">AWS EUM Social</div></div>
+
+  <!-- audit -->
+  <div class="node policy" id="n_audit" style="left:830px;top:840px;width:260px;"><div class="t">🗒 Decision audit log</div><div class="s">Every decision explainable · Amazon DynamoDB</div></div>
+
+  <!-- captions / title -->
+  <div id="caption"><div class="big" id="cap_big"></div><div class="small" id="cap_small"></div></div>
+  <div id="title"><div class="brand">RECOVERY AGENT</div><div class="tag">Your channels deliver messages. We decide what happens next.</div></div>
+</div></div>
+
+<div id="ctl">
+  <button onclick="prevScene()">‹ Prev</button>
+  <button id="pp" onclick="togglePlay()">▶ Play</button>
+  <button onclick="nextScene()">Next ›</button>
+  <button onclick="restart()">↻ Restart</button>
+  <span class="sc" id="scLabel">Scene 1 / 7</span>
+  <select id="speed" onchange="setSpeed(this.value)"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select>
+  <button onclick="fs()">⛶</button>
+  <button onclick="document.getElementById('ctl').classList.add('hidden')">✕ Hide</button>
+</div>
+<div id="hideHint">press <b>h</b> to toggle controls · <b>?clean=1</b> to hide</div>
+
+<script>
+/* ── scene configuration (central, editable) ── */
+const SCENES=[
+  {name:'The challenge',dur:7000,run:s1},
+  {name:'Intelligence activates',dur:9000,run:s2},
+  {name:'Policy validation',dur:8000,run:s3},
+  {name:'Omnichannel orchestration',dur:11000,run:s4},
+  {name:'Customer response',dur:10000,run:s5},
+  {name:'Resolution & audit',dur:8000,run:s6},
+  {name:'Hero',dur:7000,run:s7},
+];
+const $=id=>document.getElementById(id);
+const qp=new URLSearchParams(location.search);
+let speed=parseFloat(qp.get('speed')||'1')||1;
+let scene=0, playing=false, sceneTimer=null, cleanupFns=[];
+const NOFX=qp.get('nofx')==='1';
+if(NOFX){ $('grid').style.display='none'; }
+if(qp.get('clean')==='1'){ $('ctl').classList.add('hidden'); $('hideHint').classList.add('hidden'); }
+
+/* fit 1920x1080 into viewport */
+function fit(){ const s=Math.min(innerWidth/1920,innerHeight/1080); $('stage').style.transform=`scale(${s})`; }
+addEventListener('resize',fit); fit();
+
+/* helpers */
+function cls(id,c,on){ $(id).classList[on?'add':'remove'](c); }
+function on(id){ cls(id,'on',true); } function off(id){ cls(id,'on',false); }
+function pulse(id,on=true){ cls(id,'pulse',on); }
+function caption(big,small){ $('cap_big').textContent=big; $('cap_small').textContent=small||''; $('caption').classList.add('show'); }
+function hideCaption(){ $('caption').classList.remove('show'); }
+function later(ms,fn){ const t=setTimeout(fn,ms/speed); cleanupFns.push(()=>clearTimeout(t)); return t; }
+
+/* animate a particle along a path element */
+function travel(pathId,pktId,kind,ms,onDone){
+  const path=$(pathId), pkt=$(pktId); if(!path||!pkt) return;
+  pkt.className.baseVal='pkt '+(kind||''); pkt.style.opacity='1';
+  const len=path.getTotalLength(); let start=null; const D=ms/speed;
+  function step(ts){ if(start===null)start=ts; const t=Math.min(1,(ts-start)/D);
+    const p=path.getPointAtLength(t*len); pkt.setAttribute('cx',p.x); pkt.setAttribute('cy',p.y);
+    if(t<1){ raf(step); } else { pkt.style.opacity='0'; onDone&&onDone(); } }
+  let rafId; function raf(f){ rafId=requestAnimationFrame(f); } raf(step);
+  cleanupFns.push(()=>{ pkt.style.opacity='0'; cancelAnimationFrame(rafId); });
+}
+/* particle that STOPS partway (policy block) */
+function travelStop(pathId,pktId,stopFrac,ms,onStop){
+  const path=$(pathId), pkt=$(pktId); const len=path.getTotalLength(); let start=null; const D=ms/speed;
+  pkt.className.baseVal='pkt block'; pkt.style.opacity='1';
+  function step(ts){ if(start===null)start=ts; const t=Math.min(stopFrac,(ts-start)/D);
+    const p=path.getPointAtLength(t*len); pkt.setAttribute('cx',p.x); pkt.setAttribute('cy',p.y);
+    if(t<stopFrac){ requestAnimationFrame(step); } else { onStop&&onStop(); later(500,()=>{pkt.style.opacity='0';}); } }
+  requestAnimationFrame(step);
+}
+
+function clearScene(){ cleanupFns.forEach(f=>f()); cleanupFns=[]; }
+function resetVisuals(){
+  ['n_acct','n_pref','n_hist','n_chan','agent','n_ses','n_sms','n_rcs','n_wa','n_audit'].forEach(off);
+  ['agent','n_ses','n_sms','n_rcs','n_wa','n_audit','n_acct'].forEach(id=>pulse(id,false));
+  ['f_ai','f_policy','f_tools'].forEach(id=>{$(id).classList.remove('on','lit');});
+  $('agent').classList.remove('woke'); $('v_ok').classList.remove('show'); $('v_block').classList.remove('show');
+  $('title').classList.remove('show'); hideCaption();
+}
+
+/* ── scenes ── */
+function s1(){ resetVisuals();
+  later(300,()=>{ on('n_acct'); pulse('n_acct'); });
+  later(1400,()=>{ on('n_pref'); on('n_hist'); on('n_chan'); caption('Every overdue account presents a decision.','$84 past due · 32 days overdue'); });
+  later(3200,()=>{ travel('p_acct','pk1','',1600); });
+  later(3600,()=>{ travel('p_pref','pk2','',1600); });
+}
+function s2(){ resetVisuals();
+  on('n_acct');on('n_pref');on('n_hist');on('n_chan');on('agent');
+  later(300,()=>{ $('agent').classList.add('woke'); pulse('agent'); });
+  later(1200,()=>{ $('f_ai').classList.add('on','lit'); caption('OBSERVE → REASON → RECOMMEND','Amazon Bedrock · Nova 2 Lite — illustrative recommendation (not live inference)'); });
+  later(2400,()=>{ travel('p_hist','pk1','ai',1400); });
+  later(4200,()=>{ caption('Recommended action: Contact customer','Suggested channel: Email · illustrative'); });
+  later(1000,()=>{ $('f_policy').classList.add('on'); $('f_tools').classList.add('on'); });
+}
+function s3(){ resetVisuals();
+  on('n_acct');on('agent');on('n_ses');on('n_sms');on('n_rcs');on('n_wa');on('n_audit');
+  $('agent').classList.add('woke');
+  later(200,()=>{ $('f_ai').classList.add('on'); $('f_policy').classList.add('on','lit'); pulse('agent'); caption('Deterministic policy validation','opt-out · frequency · quiet hours · hardship / dispute'); });
+  // allowed example → green to SES
+  later(1800,()=>{ $('v_ok').classList.add('show'); travel('p_ses','pk1','ok',1500,()=>pulse('n_ses')); });
+  later(4200,()=>{ pulse('n_ses',false); $('v_ok').classList.remove('show'); caption('A separate account has opted out…','Watch the policy engine stop it.'); });
+  // blocked example → particle stops before the channel
+  later(6000,()=>{ $('agent').classList.remove('woke'); $('agent').classList.add('woke'); $('v_block').classList.add('show');
+    travelStop('p_sms','pk2',0.45,1400,()=>{}); });
+  later(7000,()=>{ caption('POLICY: BLOCKED — GLOBAL_OPT_OUT','The message never reaches a channel. The AI cannot override policy.'); });
+}
+function s4(){ resetVisuals();
+  on('n_acct');on('agent');on('n_ses');on('n_sms');on('n_rcs');on('n_wa');on('n_audit');
+  $('agent').classList.add('woke'); $('f_tools').classList.add('on');
+  later(300,()=>caption('Selected channel: Email','Action: send personalized outreach — one channel per decision'));
+  later(900,()=>travel('p_ses','pk1','cds',1500,()=>pulse('n_ses')));
+  later(3200,()=>{ pulse('n_ses',false); caption('Later decisions can select SMS…','Escalate only on silence — never all at once'); travel('p_sms','pk1','cds',1500,()=>pulse('n_sms')); });
+  later(5600,()=>{ pulse('n_sms',false); caption('…then RCS…','Branded, tap-to-act · RCS→SMS fallback'); travel('p_rcs','pk1','cds',1500,()=>pulse('n_rcs')); });
+  later(8000,()=>{ pulse('n_rcs',false); caption('…then WhatsApp.','Reserved for high-value / severely overdue'); travel('p_wa','pk1','cds',1500,()=>pulse('n_wa')); });
+}
+function s5(){ resetVisuals();
+  on('n_acct');on('agent');on('n_wa');on('n_audit'); $('agent').classList.add('woke'); pulse('n_wa');
+  later(300,()=>caption('Customer response: “Needs payment flexibility”','Response flows back into the intelligence engine'));
+  later(900,()=>travel('p_fb','pk1','ai',2200,()=>{ pulse('n_wa',false); pulse('agent'); $('f_ai').classList.add('on','lit'); }));
+  later(3600,()=>caption('Intent detected: Payment plan','Next action: offer plan'));
+  later(5200,()=>{ $('f_tools').classList.add('on','lit'); caption('Available tools','offer_payment_plan · apply_hardship · log_dispute · escalate_to_human'); });
+}
+function s6(){ resetVisuals();
+  on('n_acct');on('agent');on('n_audit'); $('agent').classList.add('woke');
+  later(300,()=>{ pulse('n_acct'); caption('$84 past due → payment plan accepted','No payment captured by agent · “$28 paid” is a scenario assumption, not an AWS-confirmed payment'); });
+  later(2400,()=>{ travel('p_audit','pk1','policy',1400,()=>pulse('n_audit')); });
+  later(4200,()=>caption('Every decision is explainable.','Signals · recommendation · policy ruling · executed action — recorded'));
+}
+function s7(){ resetVisuals();
+  ['n_acct','n_pref','n_hist','n_chan','agent','n_ses','n_sms','n_rcs','n_wa','n_audit'].forEach(on);
+  $('agent').classList.add('woke');
+  later(600,()=>$('title').classList.add('show'));
+}
+
+/* ── timeline control ── */
+function playScene(idx){
+  clearScene(); scene=((idx%SCENES.length)+SCENES.length)%SCENES.length;
+  $('scLabel').textContent=`Scene ${scene+1} / ${SCENES.length} · ${SCENES[scene].name}`;
+  SCENES[scene].run();
+  if(playing){ sceneTimer=setTimeout(()=>{ if(scene===SCENES.length-1 && qp.get('loop')!=='1'){ stop(); return;} nextScene(); }, SCENES[scene].dur/speed); }
+}
+function nextScene(){ playScene(scene+1); }
+function prevScene(){ playScene(scene-1); }
+function restart(){ playScene(0); if(!playing) togglePlay(); }
+function togglePlay(){ playing=!playing; $('pp').textContent=playing?'⏸ Pause':'▶ Play'; if(playing) playScene(scene); else if(sceneTimer) clearTimeout(sceneTimer); }
+function stop(){ playing=false; $('pp').textContent='▶ Play'; if(sceneTimer)clearTimeout(sceneTimer); }
+function setSpeed(v){ speed=parseFloat(v)||1; if(playing){ stop(); playing=true; $('pp').textContent='⏸ Pause'; playScene(scene);} }
+function fs(){ if(!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }
+
+addEventListener('keydown',e=>{
+  if(e.key===' '){e.preventDefault();togglePlay();} if(e.key==='ArrowRight')nextScene(); if(e.key==='ArrowLeft')prevScene();
+  if(e.key==='h'||e.key==='H'){ $('ctl').classList.toggle('hidden'); }
+});
+
+/* URL params: scene, autoplay, loop, speed */
+const startScene=parseInt(qp.get('scene')||'1',10)-1;
+$('speed').value=String(speed);
+playScene(isNaN(startScene)?0:startScene);
+if(qp.get('autoplay')==='1'){ togglePlay(); }
+</script>
+</body>
+</html>

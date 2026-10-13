@@ -102,7 +102,11 @@ async function checkBalance(input: Record<string, unknown>, conversation: Conver
     }),
   );
   if (!res.Items?.length) return { found: false, message: 'No account found for this customer.' };
-  return { found: true, accounts: res.Items.map((i) => sanitizeAccount(i as Account)) };
+  // Filter EVERY returned account through ownership — defense-in-depth even
+  // though the query is keyed on the (verified) recipient identity.
+  const owned = (res.Items as Account[]).filter((a) => accountOwnedBy(a, conversation));
+  if (!owned.length) return { found: false, message: 'No account found for this customer.' };
+  return { found: true, accounts: owned.map((a) => sanitizeAccount(a)) };
 }
 
 async function offerPaymentPlan(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {
@@ -318,7 +322,15 @@ async function logDispute(input: Record<string, unknown>, conversation: Conversa
 }
 
 async function sendReceipt(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {
-  const { recipientId, subject, body } = input as { recipientId: string; subject: string; body: string };
+  const { recipientId, subject, body } = input as { recipientId?: string; subject: string; body: string };
+  // Never send a receipt to a model-supplied address that isn't this customer's.
+  // Honor a requested recipientId only if it's the conversation key or a known
+  // channel address; otherwise send to the conversation's own identity.
+  const ownsRequested =
+    recipientId !== undefined &&
+    (recipientId === conversation.recipientId ||
+      (conversation.channels ?? []).some((c) => c.address === recipientId));
+  const dest = ownsRequested ? recipientId! : conversation.recipientId;
   await lambdaClient.send(
     new InvokeCommand({
       FunctionName: SENDER_FUNCTION,
@@ -326,7 +338,7 @@ async function sendReceipt(input: Record<string, unknown>, conversation: Convers
       Payload: Buffer.from(
         JSON.stringify({
           type: 'email',
-          recipientId: recipientId ?? conversation.recipientId,
+          recipientId: dest,
           subject,
           htmlBody: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
             <div style="background:#0f766e;color:#fff;padding:18px 20px;border-radius:8px 8px 0 0">
