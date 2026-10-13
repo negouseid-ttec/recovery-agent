@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="600" viewBox="0 0 1000 600" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748b"/></marker>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0f766e"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+  <rect width="1000" height="600" fill="#ffffff"/>
+  <rect x="0" y="0" width="1000" height="54" fill="url(#hdr)"/>
+  <text x="24" y="35" fill="#fff" font-size="22" font-weight="bold">Recovery Agent — Agent Reasoning &amp; Tools</text>
+
+  <!-- Inbound intent classes (left) -->
+  <text x="150" y="90" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="bold">INBOUND INTENTS</text>
+  <g text-anchor="middle" font-size="11">
+    <rect x="40" y="104" width="220" height="34" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"/><text x="150" y="126">promise-to-pay</text>
+    <rect x="40" y="150" width="220" height="34" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"/><text x="150" y="172">payment-plan</text>
+    <rect x="40" y="196" width="220" height="34" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"/><text x="150" y="218">dispute</text>
+    <rect x="40" y="242" width="220" height="34" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"/><text x="150" y="264">hardship</text>
+    <rect x="40" y="288" width="220" height="34" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"/><text x="150" y="310">opt-out</text>
+    <rect x="40" y="334" width="220" height="34" rx="8" fill="#fdf4ff" stroke="#c026d3" stroke-width="1.5"/><text x="150" y="356">churn-threat</text>
+  </g>
+
+  <!-- Center orchestrator -->
+  <rect x="360" y="188" width="280" height="94" rx="12" fill="#eef2ff" stroke="#6366f1" stroke-width="2.5"/>
+  <text x="500" y="222" text-anchor="middle" font-size="15" font-weight="bold">λ  ra-agent-orchestrator</text>
+  <text x="500" y="244" text-anchor="middle" font-size="11" fill="#4338ca">Bedrock Nova 2 Lite</text>
+  <text x="500" y="262" text-anchor="middle" font-size="11" fill="#4338ca">Converse loop · reasons per reply</text>
+  <g stroke="#64748b" stroke-width="1.2">
+    <line x1="260" y1="121" x2="358" y2="200" marker-end="url(#a)"/>
+    <line x1="260" y1="167" x2="358" y2="212" marker-end="url(#a)"/>
+    <line x1="260" y1="213" x2="358" y2="226" marker-end="url(#a)"/>
+    <line x1="260" y1="259" x2="358" y2="244" marker-end="url(#a)"/>
+    <line x1="260" y1="305" x2="358" y2="258" marker-end="url(#a)"/>
+    <line x1="260" y1="351" x2="358" y2="270" marker-end="url(#a)"/>
+  </g>
+
+  <!-- Tool boxes (right) -->
+  <text x="820" y="90" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="bold">TOOLS IT CAN CALL</text>
+  <g text-anchor="middle" font-size="11" font-weight="bold">
+    <rect x="710" y="104" width="250" height="34" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/><text x="835" y="126">check_balance</text>
+    <rect x="710" y="146" width="250" height="34" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/><text x="835" y="168">offer_payment_plan</text>
+    <rect x="710" y="188" width="250" height="34" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/><text x="835" y="210">record_promise_to_pay</text>
+    <rect x="710" y="230" width="250" height="34" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/><text x="835" y="252">apply_hardship</text>
+    <rect x="710" y="272" width="250" height="34" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/><text x="835" y="294">log_dispute</text>
+    <rect x="710" y="314" width="250" height="34" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/><text x="835" y="336">send_receipt</text>
+    <rect x="710" y="356" width="250" height="34" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/><text x="835" y="378">escalate_to_human</text>
+  </g>
+  <g stroke="#64748b" stroke-width="1.2">
+    <line x1="640" y1="222" x2="708" y2="121" marker-end="url(#a)"/>
+    <line x1="640" y1="228" x2="708" y2="163" marker-end="url(#a)"/>
+    <line x1="640" y1="234" x2="708" y2="205" marker-end="url(#a)"/>
+    <line x1="640" y1="240" x2="708" y2="247" marker-end="url(#a)"/>
+    <line x1="640" y1="246" x2="708" y2="289" marker-end="url(#a)"/>
+    <line x1="640" y1="252" x2="708" y2="331" marker-end="url(#a)"/>
+    <line x1="640" y1="258" x2="708" y2="373" marker-end="url(#a)"/>
+  </g>
+
+  <!-- Compliance band -->
+  <rect x="40" y="440" width="920" height="60" rx="10" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="500" y="466" text-anchor="middle" font-size="13" font-weight="bold" fill="#115e59">COMPLIANCE GUARDRAILS</text>
+  <text x="500" y="488" text-anchor="middle" font-size="11" fill="#0f766e">no threats · honors STOP/opt-out instantly · hardship-first · quiet hours · escalates legal/bankruptcy</text>
+
+  <text x="500" y="562" text-anchor="middle" font-size="11" fill="#94a3b8">An agent, not a dialer — it reasons over each reply and calls the right tool</text>
+</svg>

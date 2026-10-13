@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="600" viewBox="0 0 1000 600" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748b"/></marker>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0f766e"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  </defs>
+  <rect width="1000" height="600" fill="#ffffff"/>
+  <rect x="0" y="0" width="1000" height="54" fill="url(#hdr)"/>
+  <text x="24" y="35" fill="#fff" font-size="22" font-weight="bold">Recovery Agent — What's Built vs. What to Integrate</text>
+
+  <!-- Core box -->
+  <rect x="300" y="90" width="400" height="120" rx="12" fill="#eef2ff" stroke="#6366f1" stroke-width="2.5"/>
+  <text x="500" y="120" text-anchor="middle" font-size="15" font-weight="bold">Recovery Agent core</text>
+  <text x="500" y="140" text-anchor="middle" font-size="11" fill="#4338ca">deployed on AWS via CDK</text>
+  <text x="500" y="162" text-anchor="middle" font-size="11" fill="#4338ca">4 Lambdas · DynamoDB · Amazon Bedrock</text>
+  <rect x="398" y="174" width="204" height="26" rx="13" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="500" y="192" text-anchor="middle" font-size="11" font-weight="bold" fill="#15803d">✓ BUILT &amp; DEPLOYED</text>
+
+  <!-- Connector 1 (inbound, left) -->
+  <rect x="24" y="268" width="300" height="150" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="174" y="292" text-anchor="middle" font-size="13" font-weight="bold">Connector 1 · Account ingestion</text>
+  <text x="174" y="309" text-anchor="middle" font-size="10" font-weight="bold" fill="#9a3412">INBOUND</text>
+  <rect x="100" y="320" width="148" height="22" rx="11" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+  <text x="174" y="335" text-anchor="middle" font-size="10" font-weight="bold" fill="#92400e">INTEGRATION WORK</text>
+  <text x="174" y="358" text-anchor="middle" font-size="10" fill="#9a3412">Billing/CRM/CIS (Amdocs,</text>
+  <text x="174" y="372" text-anchor="middle" font-size="10" fill="#9a3412">Netcracker, Salesforce)</text>
+  <text x="174" y="389" text-anchor="middle" font-size="10" fill="#9a3412">batch export / S3 drop / API poll</text>
+  <text x="174" y="402" text-anchor="middle" font-size="10" fill="#9a3412">→ ra-accounts</text>
+  <text x="174" y="414" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">TODO (demo uses a seeded table)</text>
+  <line x1="300" y1="210" x2="230" y2="268" stroke="#64748b" stroke-width="1.3" marker-end="url(#a)"/>
+
+  <!-- Connector 2 (outbound, right) -->
+  <rect x="676" y="268" width="300" height="150" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="826" y="292" text-anchor="middle" font-size="13" font-weight="bold">Connector 2 · Payment rail</text>
+  <text x="826" y="309" text-anchor="middle" font-size="10" font-weight="bold" fill="#9a3412">OUTBOUND</text>
+  <rect x="752" y="320" width="148" height="22" rx="11" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+  <text x="826" y="335" text-anchor="middle" font-size="10" font-weight="bold" fill="#92400e">INTEGRATION WORK</text>
+  <text x="826" y="358" text-anchor="middle" font-size="10" fill="#9a3412">record-payment / plan →</text>
+  <text x="826" y="372" text-anchor="middle" font-size="10" fill="#9a3412">PCI processor (Stripe / ACH /</text>
+  <text x="826" y="386" text-anchor="middle" font-size="10" fill="#9a3412">card vault)</text>
+  <text x="826" y="400" text-anchor="middle" font-size="10" fill="#9a3412">tokenized hand-off; no PAN in-agent</text>
+  <text x="826" y="414" text-anchor="middle" font-size="9" font-style="italic" fill="#64748b">TODO (demo records intent only)</text>
+  <line x1="700" y1="210" x2="770" y2="268" stroke="#64748b" stroke-width="1.3" marker-end="url(#a)"/>
+
+  <!-- Connector 3 (side, bottom center) -->
+  <rect x="300" y="438" width="400" height="110" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="500" y="462" text-anchor="middle" font-size="13" font-weight="bold">Connector 3 · Compliance &amp; messaging config</text>
+  <text x="500" y="479" text-anchor="middle" font-size="10" font-weight="bold" fill="#9a3412">SIDE</text>
+  <rect x="426" y="488" width="148" height="22" rx="11" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.3"/>
+  <text x="500" y="503" text-anchor="middle" font-size="10" font-weight="bold" fill="#92400e">INTEGRATION WORK</text>
+  <text x="500" y="524" text-anchor="middle" font-size="10" fill="#9a3412">per-tenant quiet hours · frequency caps (FDCPA/Reg F, TCPA) · opt-out registry</text>
+  <text x="500" y="538" text-anchor="middle" font-size="10" fill="#9a3412">carrier onboarding: 10DLC brand reg · WhatsApp WABA · RCS agent · logic built, needs config (days)</text>
+  <line x1="500" y1="210" x2="500" y2="438" stroke="#64748b" stroke-width="1.3" marker-end="url(#a)"/>
+
+  <text x="500" y="578" text-anchor="middle" font-size="11" fill="#94a3b8">The AWS core is built &amp; deployed. Productizing = 3 connectors + standard carrier onboarding</text>
+</svg>
