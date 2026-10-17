@@ -30,7 +30,7 @@ process.stdin.on('end', () => {
   const items = (scan.Items || []).map((it) =>
     Object.fromEntries(Object.entries(it).map(([k, v]) => [k, un(v)])),
   );
-  for (const it of items) delete it.ttl;
+  for (const it of items) {delete it.ttl;it.executionState=it.executionState||({dispatched:'queued',blocked:'policy_blocked',error:'failed',skipped:'suppressed'}[it.executionResult])||it.executionResult||'recommended';}
   items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); // newest first
   process.stdout.write(JSON.stringify(items, null, 2));
 });

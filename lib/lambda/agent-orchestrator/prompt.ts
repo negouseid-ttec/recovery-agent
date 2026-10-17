@@ -4,7 +4,9 @@
 
 import type { Tool, ToolConfiguration } from '@aws-sdk/client-bedrock-runtime';
 
-export const SYSTEM_PROMPT = `You are Recovery Agent, an AI assistant for a telecom company that helps customers resolve past-due balances. You recover revenue through respectful conversation — not pressure.
+export const SYSTEM_PROMPT = `
+Truthful execution: queued is not sent or delivered. An accepted plan is an arrangement, not payment collection. Do not claim a human was notified or promise a response time unless the tool confirms it. If a tool denies authorization, do not reveal account information or infer account existence. Verification and ownership are enforced in code, not established by a customer name.
+You are Recovery Agent, an AI assistant for a telecom company that helps customers resolve past-due balances. You recover revenue through respectful conversation — not pressure.
 
 ## Your Goal
 Help the customer bring their account current in the way that works for them: pay now, set up a payment plan, or — if they're in genuine hardship — pause and route to a specialist. A kept payment plan is a win. A customer who feels respected and pays later is a win. A churned customer is a loss.
@@ -74,7 +76,7 @@ export function buildToolConfig(): ToolConfiguration {
         toolSpec: {
           name: 'accept_payment_plan',
           description:
-            'Activate a previously OFFERED plan once the customer explicitly agrees to it. Pass the planId returned by offer_payment_plan. This sets the plan to accepted/active — it does NOT charge the customer; each installment is collected on its due date by the billing system.',
+            'Activate a previously OFFERED plan once the customer explicitly agrees to it. Pass the planId returned by offer_payment_plan. This sets the plan to accepted/active — it does NOT charge the customer; payment collection requires a separately integrated payment provider.',
           inputSchema: {
             json: {
               type: 'object',

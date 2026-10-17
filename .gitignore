@@ -38,3 +38,6 @@ layers/*/nodejs/node_modules/
 # Logs
 *.log
 npm-debug.log*
+
+# Enrollment capabilities (never commit tokens)
+enrollment-request*.json

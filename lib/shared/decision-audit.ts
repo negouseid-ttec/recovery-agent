@@ -55,7 +55,7 @@ export async function recordDecision(
   try {
     await sink.put(entry);
   } catch (err) {
-    console.error('[audit] failed to persist decision', entry.decisionId, err);
+    console.error(JSON.stringify({event:'decision_audit_failed',decisionId:entry.decisionId,errorCode:'PERSIST_FAILED'}));
   }
   // Structured CloudWatch line for queryability even if the table write failed.
   console.log(

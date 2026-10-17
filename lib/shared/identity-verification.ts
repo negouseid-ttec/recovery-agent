@@ -1,170 +1,63 @@
-/**
- * Identity Verification — OTP / portal-link flow that turns an UNVERIFIED
- * channel identifier into a VERIFIED link to a canonical customer.
- *
- * This is the trigger that was missing in Phase 1: `linkVerifiedIdentity`
- * existed but nothing called it, so live identities stayed unverified. Here we
- * issue a one-time code (delivered out-of-band via the channel sender), then on
- * a correct, unexpired code we call linkVerifiedIdentity — the ONLY path that
- * attaches a channel to an existing customer.
- *
- * The challenge store is injected (ChallengeStore) so the logic is unit-testable
- * without AWS; the Lambda wires in a DynamoDB (TTL-expiring) implementation.
- *
- * Security properties (all tested):
- *  - Codes expire (TTL) and are single-use.
- *  - A capped number of attempts prevents brute force.
- *  - A wrong/expired code never verifies and never links.
- *  - Verifying channel B against customer C only links B→C if C already owns a
- *    verified identifier (you can't verify your way into someone else's account
- *    without proving control of an existing verified channel first).
- */
-
-import { randomInt } from 'crypto';
+import { randomInt, timingSafeEqual } from 'crypto';
 import type { Channel, VerificationChallenge } from './types';
 import { normalizeIdentifier, linkVerifiedIdentity, type IdentityStore } from './identity';
-
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const MAX_ATTEMPTS = 5;
-
+import { mintSession, consumeSession, type SessionStore } from './verified-session';
+export { mintSession } from './verified-session';
+export const validAddress = (channel: unknown, id: unknown): boolean => typeof id === 'string' && id.length <= 254 && (['email'].includes(String(channel)) ? /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(id) : ['sms', 'rcs', 'whatsapp'].includes(String(channel)) && /^\+[1-9]\d{7,14}$/.test(id));
 export interface ChallengeStore {
-  get(channelIdentifier: string): Promise<VerificationChallenge | undefined>;
-  put(challenge: VerificationChallenge): Promise<void>;
-  delete(channelIdentifier: string): Promise<void>;
+    get(id: string): Promise<VerificationChallenge | undefined>;
+    put(c: VerificationChallenge): Promise<void>;
+    delete(id: string): Promise<void>;
+    /** Atomic compare-and-delete/update; production must not use a read/write pair. */
+    advance(challenge: VerificationChallenge, consume: boolean): Promise<boolean>;
 }
-
-/** Generate a 6-digit numeric OTP using a CSPRNG. */
-export function generateCode(): string {
-  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+export const generateCode = () => randomInt(0, 1000000).toString().padStart(6, '0');
+export async function issueChallenge(cs: ChallengeStore, ids: IdentityStore, sessions: SessionStore, channel: Channel, raw: string, customerId: string, token?: unknown, now = new Date(), codeOverride?: string) {
+    if (!customerId || !validAddress(channel, raw))
+        return { issued: false as const, reason: 'not_authorized_for_customer' as const };
+    const id = normalizeIdentifier(channel, raw);
+    const link = await ids.getLink(id);
+    // Existing channel re-verification is safe: the code goes only to that channel.
+    const existing = link?.verification === 'verified' && link.customerId === customerId;
+    if (link?.verification === 'verified' && link.customerId !== customerId)
+        return { issued: false as const, reason: 'not_authorized_for_customer' as const };
+    // Enrollment also requires an out-of-band, IAM-provisioned session; no arbitrary customer IDs.
+    if (!existing && !await consumeSession(sessions, token, customerId, now))
+        return { issued: false as const, reason: 'not_authorized_for_customer' as const };
+    const code = codeOverride ?? generateCode();
+    const expiresAt = new Date(now.getTime() + 600000).toISOString();
+    await cs.put({ channelIdentifier: id, channel, customerId, code, attempts: 0, createdAt: now.toISOString(), expiresAt, ttl: Math.floor((now.getTime() + 600000) / 1000) });
+    return { issued: true as const, channelIdentifier: id, code, expiresAt };
 }
-
-export type IssueOutcome =
-  | { issued: true; channelIdentifier: string; code: string; expiresAt: string }
-  | { issued: false; reason: 'not_authorized_for_customer' };
-
-/**
- * A short-lived token proving the requester CONTROLS an existing verified
- * channel of a customer — minted only by completing a fresh challenge on that
- * channel (verifyCode returns one) or by an authenticated portal session.
- * Knowing an identifier string is NOT proof; a valid session token is.
- */
-export interface VerifiedSession {
-  customerId: string;
-  issuedAt: string;
-  expiresAt: string;
+export async function verifyCode(cs: ChallengeStore, ids: IdentityStore, sessions: SessionStore, channel: Channel, raw: string, code: string, now = new Date()) {
+    const fail = (reason: 'no_challenge' | 'expired' | 'too_many_attempts' | 'wrong_code') => ({ verified: false as const, reason });
+    if (!validAddress(channel, raw) || !/^\d{6}$/.test(code))
+        return fail('wrong_code');
+    const c = await cs.get(normalizeIdentifier(channel, raw));
+    if (!c || c.channel !== channel)
+        return fail('no_challenge');
+    if (c.expiresAt <= now.toISOString())
+        return fail('expired');
+    if (c.attempts >= 5)
+        return fail('too_many_attempts');
+    const correct = timingSafeEqual(Buffer.from(code), Buffer.from(c.code));
+    if (!await cs.advance(c, correct))
+        return fail('no_challenge');
+    if (!correct)
+        return fail('wrong_code');
+    const linked = await linkVerifiedIdentity(ids, channel, c.channelIdentifier, c.customerId, now);
+    if (!linked.linked)
+        return fail('wrong_code');
+    return { verified: true as const, customerId: c.customerId, session: await mintSession(sessions, c.customerId, now) };
 }
-const SESSION_TTL_MS = 15 * 60 * 1000;
-export function mintSession(customerId: string, now: Date = new Date()): VerifiedSession {
-  return { customerId, issuedAt: now.toISOString(), expiresAt: new Date(now.getTime() + SESSION_TTL_MS).toISOString() };
-}
-function sessionProvesCustomer(session: VerifiedSession | undefined, customerId: string, now: Date): boolean {
-  return !!session && session.customerId === customerId && now.getTime() <= new Date(session.expiresAt).getTime();
-}
-
-/**
- * Issue a verification challenge to link an identifier to `customerId`.
- *
- * AUTHORIZATION (anti-account-takeover):
- *  - NEW / unclaimed customer (no verified identifiers yet) → self-service
- *    enrollment is allowed. The caller SHOULD bind customerId to a trusted
- *    account record upstream (see enrollment note in the Lambda); this function
- *    does not mint identities out of thin air.
- *  - EXISTING customer (already owns verified identifiers) → requires a
- *    `verifiedSession` proving CURRENT control of an existing verified channel
- *    (minted by a fresh verifyCode on that channel, or an authenticated portal
- *    session). Merely supplying a known identifier string is NOT sufficient.
- */
-export async function issueChallenge(
-  challengeStore: ChallengeStore,
-  identityStore: IdentityStore,
-  channel: Channel,
-  rawIdentifier: string,
-  customerId: string,
-  verifiedSession?: VerifiedSession,
-  now: Date = new Date(),
-  codeOverride?: string, // tests inject a known code
-): Promise<IssueOutcome> {
-  const channelIdentifier = normalizeIdentifier(channel, rawIdentifier);
-
-  const customerClaimed = await identityStore.hasVerifiedForCustomer(customerId);
-  if (customerClaimed && !sessionProvesCustomer(verifiedSession, customerId, now)) {
-    // No fresh proof-of-control for an already-claimed customer → refuse.
-    return { issued: false, reason: 'not_authorized_for_customer' };
-  }
-
-  const code = codeOverride ?? generateCode();
-  const challenge: VerificationChallenge = {
-    channelIdentifier,
-    channel,
-    customerId,
-    code,
-    attempts: 0,
-    createdAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + CODE_TTL_MS).toISOString(),
-    ttl: Math.floor((now.getTime() + CODE_TTL_MS) / 1000),
-  };
-  await challengeStore.put(challenge);
-  return { issued: true, channelIdentifier, code, expiresAt: challenge.expiresAt };
-}
-
-export type VerifyOutcome =
-  | { verified: true; customerId: string; session: VerifiedSession }
-  | { verified: false; reason: 'no_challenge' | 'expired' | 'too_many_attempts' | 'wrong_code' };
-
-/**
- * Verify a submitted code. On success, LINK the identifier to the customer as
- * verified (via linkVerifiedIdentity) and consume the challenge. The link only
- * succeeds if the customer owns an existing verified identifier OR the identifier
- * is unclaimed — linkVerifiedIdentity enforces the anti-takeover rule.
- */
-export async function verifyCode(
-  challengeStore: ChallengeStore,
-  identityStore: IdentityStore,
-  channel: Channel,
-  rawIdentifier: string,
-  submittedCode: string,
-  now: Date = new Date(),
-): Promise<VerifyOutcome> {
-  const channelIdentifier = normalizeIdentifier(channel, rawIdentifier);
-  const challenge = await challengeStore.get(channelIdentifier);
-
-  if (!challenge) return { verified: false, reason: 'no_challenge' };
-
-  if (now.getTime() > new Date(challenge.expiresAt).getTime()) {
-    await challengeStore.delete(channelIdentifier);
-    return { verified: false, reason: 'expired' };
-  }
-
-  if (challenge.attempts >= MAX_ATTEMPTS) {
-    await challengeStore.delete(channelIdentifier);
-    return { verified: false, reason: 'too_many_attempts' };
-  }
-
-  if (submittedCode !== challenge.code) {
-    await challengeStore.put({ ...challenge, attempts: challenge.attempts + 1 });
-    return { verified: false, reason: 'wrong_code' };
-  }
-
-  // Correct code → link as verified, then consume the challenge (single-use).
-  const linked = await linkVerifiedIdentity(identityStore, channel, channelIdentifier, challenge.customerId, now);
-  await challengeStore.delete(channelIdentifier);
-  if (!linked.linked) {
-    // Anti-takeover: identifier is owned by a different verified customer.
-    return { verified: false, reason: 'wrong_code' };
-  }
-  return { verified: true, customerId: challenge.customerId, session: mintSession(challenge.customerId, now) };
-}
-
-/** In-memory ChallengeStore for tests / local demo. */
 export class InMemoryChallengeStore implements ChallengeStore {
-  private readonly m = new Map<string, VerificationChallenge>();
-  async get(id: string): Promise<VerificationChallenge | undefined> {
-    return this.m.get(id);
-  }
-  async put(c: VerificationChallenge): Promise<void> {
-    this.m.set(c.channelIdentifier, c);
-  }
-  async delete(id: string): Promise<void> {
-    this.m.delete(id);
-  }
+    readonly records = new Map<string, VerificationChallenge>();
+    async get(id: string) { return this.records.get(id); }
+    async put(c: VerificationChallenge) { this.records.set(c.channelIdentifier, c); }
+    async delete(id: string) { this.records.delete(id); }
+    async advance(c: VerificationChallenge, consume: boolean) { const current = this.records.get(c.channelIdentifier); if (!current || current.code !== c.code || current.createdAt !== c.createdAt || current.attempts !== c.attempts)
+        return false; if (consume)
+        this.records.delete(c.channelIdentifier);
+    else
+        this.records.set(c.channelIdentifier, { ...c, attempts: c.attempts + 1 }); return true; }
 }

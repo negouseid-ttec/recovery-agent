@@ -21,6 +21,7 @@ import {
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import type { Handler } from 'aws-lambda';
 import { v4 as uuid } from 'uuid';
+import {validAddress} from '../../shared/identity-verification';
 import type { InboundMessage, InboundCategorization } from '../../shared/types';
 
 const bedrock = new BedrockRuntimeClient({});
@@ -42,18 +43,21 @@ Return a JSON object (and NOTHING else) with these fields:
 
 Rules: "STOP", "stop texting me", "do not contact" => intent opt_out, needsHuman true. Any mention of a lawyer or bankruptcy => needsHuman true. Job loss / illness / "can't afford" => intent hardship, sentiment distressed. Classify accurately; a missed opt-out or hardship is a compliance failure.`;
 
-export const handler: Handler = async (event) => {
+export const handler: Handler = async (request) => {
+  const event=request.message??request;
   const text: string = event.text ?? event.emailBody ?? extractText(event);
   const from: string = event.from ?? event.source ?? 'unknown';
   const channel = (event.channel as InboundMessage['channel']) ?? 'email';
 
-  console.log(`[triage] Inbound ${channel} from ${from}: "${text.substring(0, 80)}"`);
+  if(!validAddress(channel,from)||!text)return {statusCode:400,error:'Invalid inbound message'};
+  console.log(JSON.stringify({event:'triage_inbound',channel}));
 
-  const categorization = await classify(text);
-  console.log('[triage] Result:', JSON.stringify(categorization));
+  let categorization:InboundCategorization;
+  try{categorization=await classify(text);}catch{categorization=fallback(text);}
+  console.log(JSON.stringify({event:'triage_result',intent:categorization.intent,needsHuman:categorization.needsHuman}));
 
   const inbound: InboundMessage = {
-    messageId: uuid(),
+    messageId: event.messageId??uuid(),
     channel,
     from,
     to: event.to ?? event.destination ?? '',
@@ -106,7 +110,7 @@ async function classify(text: string): Promise<InboundCategorization> {
   }
 }
 
-function fallback(text: string): InboundCategorization {
+export function fallback(text: string): InboundCategorization {
   const t = text.toLowerCase();
   const optOut = /\bstop\b|opt.?out|do not contact|cease/.test(t);
   const legal = /lawyer|attorney|bankrupt|sue|legal/.test(t);

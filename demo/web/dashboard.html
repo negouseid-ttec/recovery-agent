@@ -90,6 +90,7 @@
   <footer id="footer"></footer>
 </div>
 
+<script src="audit-view.js"></script>
 <script>
 /* ============================================================
    DATA ADAPTER
@@ -155,60 +156,71 @@ async function load(){
       const r=await fetch(src); const data=await r.json();
       const rows=Array.isArray(data)?data:(data.Items||data.records||[]);
       rows.forEach(x=>x._src='live');
-      render(rows,'live',`Live data from <code>${src}</code> — ${rows.length} decision records exported from your <code>ra-decision-log</code>.`);
+      render(rows,'live',`Imported data from <code>${esc(src)}</code> — ${rows.length} decision records exported from your <code>ra-decision-log</code>.`);
       return;
     }catch(e){ /* fall through to bundled */ }
   }
   const rows=[...LIVE_CAPTURED,...EXAMPLES];
   render(rows,'sample',
-    `Showing <b>bundled data</b>: ${LIVE_CAPTURED.length} <span style="color:var(--ok)">LIVE-CAPTURED</span> records (real, scanned from <code>ra-decision-log</code> on vf-dev-team5) + ${EXAMPLES.length} <span style="color:var(--amber)">EXAMPLE</span> records illustrating opt-out / hardship / heuristic outcomes. Clone, deploy, run the agent, then <code>?src=yourlog.json</code> to render YOUR live decisions.`);
+    `Showing <b>bundled data</b>: ${LIVE_CAPTURED.length} <span style="color:var(--ok)">HISTORICAL</span> records (bundled captures; not independently reverified by this build) + ${EXAMPLES.length} <span style="color:var(--amber)">EXAMPLE</span> records illustrating opt-out / hardship / heuristic outcomes. Clone, deploy, run the agent, then <code>?src=yourlog.json</code> to render YOUR live decisions.`);
 }
 
 function render(rows,mode,bannerHtml){
+  rows=normalizeAudit(rows);
   $('srcpill').textContent = mode==='live' ? '● LIVE DATA' : '◐ BUNDLED SAMPLE';
   $('srcpill').className = 'srcpill '+(mode==='live'?'live':'sample');
   $('banner').innerHTML = bannerHtml;
   $('rowcount').textContent = rows.length;
 
   const total=rows.length;
-  const dispatched=rows.filter(r=>r.executionResult==='dispatched').length;
-  const blocked=rows.filter(r=>r.executionResult==='blocked').length;
-  const modelN=rows.filter(r=>r.recommendation&&r.recommendation.confidenceBasis==='model').length;
-  const cost=rows.reduce((a,r)=>a+(r.estCostUsd||0),0);
+  const observed=rows.filter(r=>r.evidenceSource==='aws_observed');
+  const illustrative=rows.filter(r=>r.evidenceSource==='illustrative');
+  const queued=observed.filter(r=>r.executionState==='queued').length;
+  const accepted=observed.filter(r=>r.executionState==='provider_accepted').length;
+  const delivered=observed.filter(r=>r.executionState==='delivered').length;
+  const failed=observed.filter(r=>r.executionState==='failed').length;
+  const blocked=observed.filter(r=>r.executionResult==='policy_blocked').length;
+  const modelN=observed.filter(r=>r.recommendation&&r.recommendation.confidenceBasis==='model').length;
+  const cost=observed.reduce((a,r)=>a+(r.estCostUsd||0),0);
 
   $('tiles').innerHTML=[
     tile(total,'Decisions logged',''),
-    tile(dispatched,'Dispatched','ok'),
-    tile(blocked,'Blocked by policy','block'),
-    tile(modelN,'AI (Bedrock) recs','ai'),
-    tile(money(cost),'Est. messaging cost','cost'),
+    tile(observed.length,'Observed AWS decisions',''),
+    tile(illustrative.length,'Illustrative fixtures',''),
+    tile(queued,'Queued',''),
+    tile(accepted,'Provider accepted','ok'),
+    tile(delivered,'Confirmed delivered','ok'),
+    tile(failed,'Failed / needs review','block'),
+    tile(blocked,'Observed policy blocks','block'),
+    tile(modelN,'Observed Bedrock recs','ai'),
+    tile(money(cost),'Observed est. messaging cost','cost'),
   ].join('');
 
   // policy reason-code breakdown
   const byCode={};
-  rows.forEach(r=>{const c=r.policyDecision.reasonCode;byCode[c]=(byCode[c]||0)+1;});
+  rows.forEach(r=>{const c=r.policyDecision?.reasonCode||'NOT_RECORDED';byCode[c]=(byCode[c]||0)+1;});
   const maxC=Math.max(1,...Object.values(byCode));
   $('policyBreak').innerHTML=Object.entries(byCode).sort((a,b)=>b[1]-a[1]).map(([c,n])=>
     `<div class="bar"><span class="lab mono">${c}</span><div class="track"><div class="fill ${c==='ALLOWED'?'rc-ALLOWED':'rc-block'}" style="width:${n/maxC*100}%"></div></div><span class="n">${n}</span></div>`).join('');
 
   // channel of executed outreach (dispatched only)
   const byCh={};
-  rows.filter(r=>r.executionResult==='dispatched'&&r.recommendation).forEach(r=>{const ch=r.recommendation.channel;byCh[ch]=(byCh[ch]||0)+1;});
+  rows.filter(r=>['provider_accepted','delivered'].includes(r.executionResult)&&r.recommendation).forEach(r=>{const ch=r.recommendation.channel;byCh[ch]=(byCh[ch]||0)+1;});
   const maxCh=Math.max(1,...Object.values(byCh));
   $('channelBreak').innerHTML=Object.keys(byCh).length?Object.entries(byCh).sort((a,b)=>b[1]-a[1]).map(([ch,n])=>
     `<div class="bar"><span class="lab">${ch.toUpperCase()}</span><div class="track"><div class="fill ${CH_COLORS[ch]||'ch-none'}" style="width:${n/maxCh*100}%"></div></div><span class="n">${n}</span></div>`).join('')
-    : `<div class="sub">No dispatched outreach in this dataset (all held/blocked).</div>`;
+    : `<div class="sub">No provider-accepted outreach in this dataset. Queued is not delivered.</div>`;
 
   // decision table
   $('rows').innerHTML=rows.map(r=>{
     const pol=r.policyDecision, allowed=pol.allowed;
     const rec=r.recommendation;
-    const resClass=r.executionResult==='dispatched'?'ok':r.executionResult==='blocked'?'block':'skip';
+    const resClass=['provider_accepted','delivered'].includes(r.executionResult)?'ok':r.executionResult==='policy_blocked'?'block':'skip';
     const sig=r.signals||{};
     const sigStr=`${sig.status||''}${sig.pastDueCents!=null?' · $'+(sig.pastDueCents/100).toFixed(0):''}${sig.daysPastDue!=null?' · '+sig.daysPastDue+'d overdue':''}${sig.attempts!=null?' · '+sig.attempts+' attempts':''}`;
     return `<tr>
-      <td><span class="mono">${r.decisionId}</span><div class="tagrow"><span class="srctag ${r._src==='live'?'live':'ex'}">${r._src==='live'?'LIVE-CAPTURED':'EXAMPLE'}</span></div></td>
-      <td><b>${r.accountId||'—'}</b><div class="reason">${sigStr}</div></td>
+      <td><span class="mono">${esc(r.decisionId)}</span><div class="tagrow"><span class="srctag ${r._src==='live'?'live':'ex'}">${r.evidenceSource==='aws_observed'?'AWS OBSERVED':r.evidenceSource==='illustrative'?'ILLUSTRATIVE':'HISTORICAL / UNVERIFIED'}</span></div></td>
+      <td><b>${esc(r.accountId||'—')}</b><div class="reason">${sigStr}</div></td>
       <td>${rec?`${rec.action} · <b>${(rec.channel||'none').toUpperCase()}</b> <span class="pill ${rec.confidenceBasis==='model'?'ai':'heur'}">${rec.confidenceBasis}</span><div class="reason">${esc(rec.reason||'')}</div>`:'<span class="reason">— (blocked pre-recommendation)</span>'}</td>
       <td><span class="pill ${allowed?'ok':'block'}">${pol.reasonCode}</span><div class="reason">${esc(pol.reason||'')}</div></td>
       <td><b>${r.executedAction}</b> <span class="pill ${resClass}">${r.executionResult}</span></td>
