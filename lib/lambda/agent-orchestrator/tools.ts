@@ -298,7 +298,8 @@ async function logDispute(input: Record<string, unknown>, conversation: Conversa
         status: 'open',
         createdAt: new Date().toISOString(),
     };
-    await ddb.send(new PutCommand({ TableName: PLAN_TABLE, Item: { ...dispute, planId: dispute.disputeId, kind: 'dispute' } }));
+    // Enforce ownership BEFORE any write: a foreign accountId fails the conditional
+    // and throws, so no dispute record is persisted for an account the caller does not own.
     await ddb.send(new UpdateCommand({
         TableName: ACCOUNT_TABLE,
         Key: { accountId },
@@ -307,6 +308,7 @@ async function logDispute(input: Record<string, unknown>, conversation: Conversa
         ExpressionAttributeNames: { '#s': 'status' },
         ExpressionAttributeValues: { ':s': 'in_dispute', ':owner': conversation.customerId },
     }));
+    await ddb.send(new PutCommand({ TableName: PLAN_TABLE, Item: { ...dispute, planId: dispute.disputeId, kind: 'dispute' } }));
     return { success: true, disputeId: dispute.disputeId, message: `Dispute logged: ${reason}. Collection paused on the disputed amount while we review.` };
 }
 async function sendReceipt(input: Record<string, unknown>, conversation: Conversation): Promise<unknown> {

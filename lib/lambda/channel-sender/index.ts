@@ -25,7 +25,6 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
 /** Final policy gate. All collection sends fail closed; OTP transport is isolated in a different IAM entry point. */
 async function policyGate(message: OutboundMessage & {
     channel?: Channel;
-    bypassPolicy?: boolean;
 }): Promise<{
     ok: true;
     account:Account;
