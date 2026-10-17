@@ -51,7 +51,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return { statusCode: 200, body: 'OK' };
     }
 
-    console.log(`[sms-rcs-inbound] ${inbound.channel} from ${inbound.from}: "${inbound.text?.substring(0, 60)}"`);
+    console.log(JSON.stringify({event:'inbound_normalized',channel:inbound.channel}));
 
     // Invoke the agent orchestrator asynchronously
     await lambdaClient.send(
@@ -64,7 +64,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return { statusCode: 200, body: 'OK' };
   } catch (err) {
-    console.error('[sms-rcs-inbound] Error:', err);
+    console.error(JSON.stringify({event:'webhook_error',code:'NORMALIZATION_OR_INVOCATION_FAILED'}));
     return { statusCode: 500, body: 'Internal error' };
   }
 };

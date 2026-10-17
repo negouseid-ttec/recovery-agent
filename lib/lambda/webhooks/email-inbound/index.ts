@@ -61,7 +61,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       rawPayload: notification,
     };
 
-    console.log(`[email-inbound] From ${inbound.from}: "${inbound.text?.substring(0, 60)}"`);
+    console.log(JSON.stringify({event:'inbound_normalized',channel:inbound.channel}));
 
     await lambdaClient.send(
       new InvokeCommand({
@@ -73,7 +73,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return { statusCode: 200, body: 'OK' };
   } catch (err) {
-    console.error('[email-inbound] Error:', err);
+    console.error(JSON.stringify({event:'webhook_error',code:'NORMALIZATION_OR_INVOCATION_FAILED'}));
     return { statusCode: 500, body: 'Internal error' };
   }
 };

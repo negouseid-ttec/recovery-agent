@@ -1,131 +1,23 @@
-/**
- * OTP identity-verification tests — issue, verify, expiry, brute-force cap,
- * single-use, anti-takeover, and ISSUE authorization.
- */
-import {
-  issueChallenge,
-  verifyCode,
-  generateCode,
-  mintSession,
-  InMemoryChallengeStore,
-} from '../lib/shared/identity-verification';
+import { issueChallenge, verifyCode, InMemoryChallengeStore, generateCode } from '../lib/shared/identity-verification';
 import { InMemoryIdentityStore, resolveIdentity } from '../lib/shared/identity';
-
+import { InMemorySessionStore, mintSession, hashToken } from '../lib/shared/verified-session';
 const now = new Date('2026-10-12T16:00:00Z');
-function stores() { return { cs: new InMemoryChallengeStore(), is: new InMemoryIdentityStore() }; }
-
-/** Issue helper (new-customer path needs no session; existing needs one). */
-async function issue(cs: InMemoryChallengeStore, is: InMemoryIdentityStore, channel: any, id: string, cust: string, code: string, session?: any) {
-  return issueChallenge(cs, is, channel, id, cust, session, now, code);
-}
-
-describe('generateCode', () => {
-  test('is a 6-digit numeric string', () => {
-    for (let i = 0; i < 50; i++) expect(generateCode()).toMatch(/^\d{6}$/);
-  });
-});
-
-describe('issue + verify happy path', () => {
-  test('a correct code verifies and links the identity (new customer)', async () => {
-    const { cs, is } = stores();
-    const iss = await issue(cs, is, 'whatsapp', '+15551230001', 'CUST-DANA', '123456');
-    expect(iss.issued).toBe(true);
-    const out = await verifyCode(cs, is, 'whatsapp', '+15551230001', '123456', now);
-    expect(out.verified).toBe(true);
-    const resolved = await resolveIdentity(is, 'whatsapp', '+15551230001');
-    expect(resolved.verification).toBe('verified');
-    expect(resolved.customerId).toBe('CUST-DANA');
-  });
-
-  test('cross-channel link with a fresh verifiedSession (proof of control)', async () => {
-    const { cs, is } = stores();
-    is.seedVerified('sms', '+15551230001', 'CUST-DANA'); // existing verified channel
-    const session = mintSession('CUST-DANA', now); // from a completed fresh challenge
-    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '222222', session);
-    expect(iss.issued).toBe(true);
-    const out = await verifyCode(cs, is, 'email', 'dana@example.com', '222222', now);
-    expect(out.verified).toBe(true);
-    const viaEmail = await resolveIdentity(is, 'email', 'dana@example.com');
-    const viaSms = await resolveIdentity(is, 'sms', '+15551230001');
-    expect(viaEmail.customerId).toBe(viaSms.customerId);
-  });
-
-  test('verifyCode returns a session usable to link the next channel', async () => {
-    const { cs, is } = stores();
-    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '111111'); // new customer self-enroll
-    const first = await verifyCode(cs, is, 'sms', '+15551230001', '111111', now);
-    expect(first.verified).toBe(true);
-    if (!first.verified) return;
-    // Use the returned session to add email to the now-existing customer.
-    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '333333', first.session);
-    expect(iss.issued).toBe(true);
-  });
-});
-
-describe('ISSUE authorization (anti-takeover at issuance)', () => {
-  test('cannot issue for an EXISTING customer without a verifiedSession', async () => {
-    const { cs, is } = stores();
-    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
-    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456'); // no session
-    expect(iss.issued).toBe(false);
-    if (!iss.issued) expect(iss.reason).toBe('not_authorized_for_customer');
-  });
-
-  test('knowing an identifier is NOT enough — only a fresh session works', async () => {
-    const { cs, is } = stores();
-    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
-    // Attacker knows Dana's verified number but has no session for her.
-    const sessionForBob = mintSession('CUST-BOB', now);
-    const iss = await issue(cs, is, 'email', 'attacker@evil.com', 'CUST-DANA', '123456', sessionForBob);
-    expect(iss.issued).toBe(false);
-  });
-
-  test('an EXPIRED session is rejected', async () => {
-    const { cs, is } = stores();
-    is.seedVerified('sms', '+15551230001', 'CUST-DANA');
-    const stale = mintSession('CUST-DANA', new Date(now.getTime() - 20 * 60 * 1000)); // 20 min old (>15m TTL)
-    const iss = await issue(cs, is, 'email', 'dana@example.com', 'CUST-DANA', '123456', stale);
-    expect(iss.issued).toBe(false);
-  });
-
-  test('new/unclaimed customer can self-issue (first verification)', async () => {
-    const { cs, is } = stores();
-    const iss = await issue(cs, is, 'sms', '+15559990000', 'CUST-NEW', '123456');
-    expect(iss.issued).toBe(true);
-  });
-});
-
-describe('failure modes', () => {
-  test('wrong code does not verify or link', async () => {
-    const { cs, is } = stores();
-    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
-    const out = await verifyCode(cs, is, 'sms', '+15551230001', '000000', now);
-    expect(out).toEqual({ verified: false, reason: 'wrong_code' });
-  });
-
-  test('expired code does not verify', async () => {
-    const { cs, is } = stores();
-    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
-    const later = new Date(now.getTime() + 11 * 60 * 1000);
-    expect(await verifyCode(cs, is, 'sms', '+15551230001', '123456', later)).toEqual({ verified: false, reason: 'expired' });
-  });
-
-  test('no challenge issued → no_challenge', async () => {
-    const { cs, is } = stores();
-    expect(await verifyCode(cs, is, 'sms', '+15559999999', '123456', now)).toEqual({ verified: false, reason: 'no_challenge' });
-  });
-
-  test('brute force is capped after 5 wrong attempts', async () => {
-    const { cs, is } = stores();
-    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
-    for (let i = 0; i < 5; i++) await verifyCode(cs, is, 'sms', '+15551230001', '000000', now);
-    expect(await verifyCode(cs, is, 'sms', '+15551230001', '123456', now)).toEqual({ verified: false, reason: 'too_many_attempts' });
-  });
-
-  test('single-use: a verified code cannot be replayed', async () => {
-    const { cs, is } = stores();
-    await issue(cs, is, 'sms', '+15551230001', 'CUST-DANA', '123456');
-    expect((await verifyCode(cs, is, 'sms', '+15551230001', '123456', now)).verified).toBe(true);
-    expect(await verifyCode(cs, is, 'sms', '+15551230001', '123456', now)).toEqual({ verified: false, reason: 'no_challenge' });
-  });
-});
+function setup() { return { cs: new InMemoryChallengeStore(), ids: new InMemoryIdentityStore(), ss: new InMemorySessionStore() }; }
+const issue = (s: ReturnType<typeof setup>, token?: unknown, id = 'dana@example.com', customer = 'C1', at = now) => issueChallenge(s.cs, s.ids, s.ss, 'email', id, customer, token, at, '123456');
+const verify = (s: ReturnType<typeof setup>, code = '123456', at = now) => verifyCode(s.cs, s.ids, s.ss, 'email', 'dana@example.com', code, at);
+test('CSPRNG code shape', () => { expect(generateCode()).toMatch(/^\d{6}$/); });
+test('opaque session stores only hash and method', async () => { const s = setup(); const token = await mintSession(s.ss, 'C1', now); expect(token).toHaveLength(43); expect(s.ss.records.get(hashToken(token))).toMatchObject({ customerId: 'C1', method: 'existing_channel_otp' }); expect(JSON.stringify([...s.ss.records.values()])).not.toContain(token); });
+test.each([undefined, 'fabricated', { customerId: 'C1', expiresAt: '2099-01-01' }])('fabricated or missing session fails closed: %p', async (token) => { expect((await issue(setup(), token)).issued).toBe(false); });
+test('unauthorized initial enrollment fails', async () => { expect((await issue(setup())).issued).toBe(false); });
+test('authenticated enrollment verifies OTP and links canonical identity', async () => { const s = setup(); const token = await mintSession(s.ss, 'C1', now, 'authenticated_enrollment'); expect((await issue(s, token)).issued).toBe(true); const r = await verify(s); expect(r.verified).toBe(true); expect(await resolveIdentity(s.ids, 'email', 'dana@example.com')).toMatchObject({ customerId: 'C1', verification: 'verified' }); });
+test('verified existing channel can obtain fresh proof', async () => { const s = setup(); s.ids.seedVerified('email', 'dana@example.com', 'C1'); expect((await issue(s)).issued).toBe(true); expect((await verify(s)).verified).toBe(true); });
+test('wrong customer session rejected without consumption', async () => { const s = setup(); const token = await mintSession(s.ss, 'OTHER', now); expect((await issue(s, token)).issued).toBe(false); expect(s.ss.records.has(hashToken(token))).toBe(true); });
+test('expired session rejected', async () => { const s = setup(); const token = await mintSession(s.ss, 'C1', new Date(now.getTime() - 900001)); expect((await issue(s, token)).issued).toBe(false); });
+test('single-use session rejects concurrent replay', async () => { const s = setup(); const token = await mintSession(s.ss, 'C1', now); const results = await Promise.all([issue(s, token), issue(s, token, 'other@example.com')]); expect(results.filter(r => r.issued)).toHaveLength(1); expect((await issue(s, token)).issued).toBe(false); });
+test('OTP wrong code and attempt cap', async () => { const s = setup(); await issue(s, await mintSession(s.ss, 'C1', now)); for (let i = 0; i < 5; i++)
+    expect(await verify(s, '000000')).toMatchObject({ verified: false, reason: 'wrong_code' }); expect(await verify(s)).toMatchObject({ verified: false, reason: 'too_many_attempts' }); });
+test('expired OTP', async () => { const s = setup(); await issue(s, await mintSession(s.ss, 'C1', now)); expect(await verify(s, '123456', new Date(now.getTime() + 600001))).toMatchObject({ verified: false, reason: 'expired' }); });
+test('OTP concurrent single use', async () => { const s = setup(); await issue(s, await mintSession(s.ss, 'C1', now)); const r = await Promise.all([verify(s), verify(s)]); expect(r.filter(x => x.verified)).toHaveLength(1); });
+test('owned identifier cannot be reassigned', async () => { const s = setup(); s.ids.seedVerified('email', 'dana@example.com', 'OTHER'); expect((await issue(s, await mintSession(s.ss, 'C1', now))).issued).toBe(false); });
+test('verified proof links a second channel to the same customer', async () => { const s = setup(); s.ids.seedVerified('email', 'dana@example.com', 'C1'); await issue(s); const r = await verify(s); if (!r.verified)
+    throw Error('verification failed'); expect((await issue(s, r.session, 'other@example.com')).issued).toBe(true); expect((await verifyCode(s.cs, s.ids, s.ss, 'email', 'other@example.com', '123456', now)).verified).toBe(true); expect((await resolveIdentity(s.ids, 'email', 'other@example.com')).customerId).toBe('C1'); });

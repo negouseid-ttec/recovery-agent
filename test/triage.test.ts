@@ -1,6 +1,6 @@
 /**
  * Triage fallback classifier tests — the deterministic safety net used when
- * Bedrock is unavailable. Mirrors the fallback() logic in
+ * Bedrock is unavailable. Tests the production fallback() logic in
  * lib/lambda/message-triage/index.ts so the compliance-critical branches
  * (opt-out, hardship, legal) are regression-tested.
  */
@@ -11,19 +11,8 @@ type Intent =
 
 interface Cat { intent: Intent; urgency: string; needsHuman: boolean; sentiment: string; }
 
-function fallback(text: string): Cat {
-  const t = text.toLowerCase();
-  const optOut = /\bstop\b|opt.?out|do not contact|cease/.test(t);
-  const legal = /lawyer|attorney|bankrupt|sue|legal/.test(t);
-  const hardship = /lost my job|laid off|can.?t afford|illness|sick|hospital|hardship|no money/.test(t);
-  const dispute = /dispute|not my|didn.?t|wrong|already paid|incorrect/.test(t);
-  return {
-    intent: optOut ? 'opt_out' : hardship ? 'hardship' : dispute ? 'dispute' : /plan|split|installment/.test(t) ? 'payment_plan_request' : 'question',
-    urgency: optOut || legal ? 'critical' : hardship ? 'high' : 'medium',
-    needsHuman: optOut || legal,
-    sentiment: hardship ? 'distressed' : /angry|ridiculous|unacceptable|!!/.test(t) ? 'frustrated' : 'neutral',
-  };
-}
+import {fallback} from '../lib/lambda/message-triage';
+
 
 describe('triage fallback — compliance-critical branches', () => {
   test('STOP → opt_out, needsHuman, critical', () => {
