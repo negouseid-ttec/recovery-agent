@@ -1,3 +1,5 @@
+> Hardening revision: guided journey outcomes are illustrative. A $28 initial payment is an agreed arrangement, not provider-confirmed collection. Queued messages are not delivered, and pending human review does not prove specialist notification. Historical footage may precede this revision; use current audit evidence for live claims.
+
 # Recovery Agent — Video Shot List (~3 min + ~15s live proof)
 
 Record off the three live pages + the live-proof terminal. Screen 1920×1080,
