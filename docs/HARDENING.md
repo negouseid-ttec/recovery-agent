@@ -121,4 +121,20 @@ Coverage collection includes **all `lib/**/*.ts`**, not only imported modules: *
 
 Final synthesized IAM inspection found four wildcard-resource send statements: SMS/RCS and WhatsApp on the normal and OTP senders when provider resource ARN settings are absent. No additional wildcard-resource IAM statements were present in the synthesized stacks. Configure the documented origination ARN settings before production. The new session, OTP challenge, delivery adapter and audit permissions are table/function scoped.
 
-No final local failures remain. AWS deployment, actual DynamoDB conditional races, provider/carrier acceptance or delivery, remote GitHub Actions, and pixel-level browser validation remain **not executed**. Existing guided demo tests/screen claims are illustrative; no payment was collected.
+No final local failures remain. Actual DynamoDB conditional races, carrier (SMS/RCS/WhatsApp) delivery, and pixel-level browser validation remain **not executed**. Existing guided demo tests/screen claims are illustrative; no payment was collected.
+
+### Observed live end-to-end trace — October 18, 2026 (vf-dev-team5, us-east-1)
+
+A single decision was traced from recommendation through a real Amazon SES provider acceptance, using the hardened pipeline (deployed with a verified `SES_FROM_EMAIL`). The verified email identity was established through the real OTP round-trip (operator-authenticated enrollment → `issue` → `verify`), not a hand-written link; opt-outs/holds were **not** reset to force a send. The test account was configured email-reachable only (SMS/RCS/WhatsApp opted out), which is the state that legitimately routes first contact to email.
+
+| Stage | Record | Observed value |
+|---|---|---|
+| OTP issue (identity) | `ra-identity-verification` | `{ issued: true, delivery: "provider_accepted" }` — OTP delivered via SES |
+| Verified link created | `ra-identity-links` | `channel=email, customerId=CUST-TRACE, verification=verified` |
+| 1. AI recommendation + policy | `DEC-6a91230d-eec5-440c-87ba-f13f2f92b8c8` | `recommendation.channel=email`, `policyDecision=ALLOWED`, `executedAction=contact`, `executionState=queued` |
+| 2. Sender provider result | `SEND-c1714f29…6baab` (`sourceDecisionId` → the decision above) | `executionState=provider_accepted`, `evidenceSource=aws_observed`, `providerMessageIds=[010001a14cfcaa18-22f8c8a1-ab04-4e41-9fde-a43e337e8303-000000]` |
+| Correlation ID (both rows) | `by-correlation` GSI | `OUT-2b5601f4-f89d-4e31-a8c6-f91e961fb5d7:4e6b8321-744d-43a8-83b8-5a85ac1256a3` |
+| Corroboration | `sesv2 get-account` | `SentLast24Hours` incremented (OTP + collection email) |
+| Timestamps | sender row | `createdAt 03:09:49.118Z → updatedAt 03:09:49.572Z` (queued → provider_accepted in ~454 ms) |
+
+This proves **Bedrock-eligible recommendation → deterministic policy authorization → real SES provider acceptance with a provider MessageId → correlated audit**, with `queued` and `provider_accepted` recorded as distinct states under one correlation ID. **Delivery** is not asserted: no SES delivery-event subscription is deployed, so the lifecycle stops at `provider_accepted`. Non-email carrier channels (SMS/RCS/WhatsApp) remain sandbox/onboarding-gated and were not sent live.
