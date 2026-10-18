@@ -29,6 +29,17 @@ const DECISION_TABLE = process.env.DECISION_TABLE ?? '';
 const SENDER_FUNCTION = process.env.SENDER_FUNCTION_NAME ?? 'ra-channel-sender';
 const BATCH_LIMIT = Number(process.env.OUTREACH_BATCH_LIMIT ?? 25);
 const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+/**
+ * Build the opening greeting for a collection message. Uses the customer's name
+ * only when it is a real, non-empty string; otherwise falls back to a neutral
+ * "Hi there," so a missing/blank name never renders "Hi undefined," to a customer.
+ * Exported for direct unit testing of the real production template logic.
+ */
+export const collectionGreeting = (customerName?: unknown): string => {
+    const name = typeof customerName === 'string' ? customerName.trim() : '';
+    return name ? `Hi ${name},` : 'Hi there,';
+};
 /** DynamoDB-backed decision sink. */
 const decisionSink: DecisionSink = {
     async put(entry: DecisionLogEntry): Promise<void> {
@@ -104,7 +115,7 @@ async function processAccount(a: Account, correlationId: string, now: Date, loca
                 purpose: 'collection', accountId: a.accountId, decisionId, correlationId,
                 recipientId: destination,
                 channel: recommendation.channel,
-                text: `Hi ${a.customerName}, this is your telecom. Your account has a past-due balance of ` +
+                text: `${collectionGreeting(a.customerName)} this is your telecom. Your account has a past-due balance of ` +
                     `${dollars(a.pastDueCents)}${a.suspensionDate ? ` and service may pause ${a.suspensionDate}` : ''}. ` +
                     `Reply HELP and I'll make it easy — pay in full or split into smaller payments.`,
             };
