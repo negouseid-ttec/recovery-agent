@@ -8,7 +8,23 @@ This work hardens the existing Lambda/TypeScript/CDK implementation. It has been
 
 ## Architecture and trust boundaries
 
-[Runtime](docs/architecture-runtime.svg) · [Decision flow](docs/architecture-decision-flow.svg) · [Agent tools](docs/architecture-agent-tools.svg) · [External integrations](docs/architecture-integration.svg)
+Four diagrams describe the system. Source SVGs: [Runtime](docs/architecture-runtime.svg) · [Decision flow](docs/architecture-decision-flow.svg) · [Agent tools](docs/architecture-agent-tools.svg) · [External integrations](docs/architecture-integration.svg).
+
+**Runtime pipeline** — inbound channels → API Gateway → triage (Nova 2 Lite) → orchestrator (Converse + Tool Use) ⇄ DynamoDB → channel sender → outbound.
+
+![Runtime pipeline](docs/architecture-runtime.png)
+
+**Escalation-ladder decision flow** — daily proactive outreach climbs email → SMS → RCS → WhatsApp by cost and silence, gated by quiet hours and per-channel opt-out; any customer reply stops the ladder.
+
+![Escalation-ladder decision flow](docs/architecture-decision-flow.png)
+
+**The agent (reasoning + tool belt)** — Nova triage classifies the inbound intent; the orchestrator calls the right tool from a fixed belt under compliance-by-design rules.
+
+![Agent reasoning and tool belt](docs/architecture-agent-tools.png)
+
+**Enterprise integration** — the deployed AWS core plus the three connectors (account ingestion, payment rail, compliance/messaging config) that remain production integration work.
+
+![Enterprise integration connectors](docs/architecture-integration.png)
 
 ```text
 Authenticated channel adapter -> triage (Bedrock Nova 2 Lite)
