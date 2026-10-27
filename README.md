@@ -2,6 +2,10 @@
 
 **Your channels deliver messages. Recovery Agent decides what happens next.**
 
+**▶ Demo video:** https://www.youtube.com/watch?v=40halypoB6M · **Live demo:** https://d3rtl5b9kojwtc.cloudfront.net · **Repository:** https://github.com/negouseid-ttec/recovery-agent
+
+[Checklist](SUBMISSION_CHECKLIST.md) · [Video script](demo/VIDEO_SCRIPT.md) · [Shotlist](demo/VIDEO_SHOTLIST.md) · [MIT license](LICENSE)
+
 Recovery Agent is a telecom past-due recovery prototype. It selects a next action using account context, channel availability and conversation history, then applies deterministic policy before any AWS messaging call. Amazon Bedrock can recommend actions and invoke account tools; it cannot authorize access or override opt-out, hardship, dispute, quiet-hour or contact-limit restrictions.
 
 This work hardens the existing Lambda/TypeScript/CDK implementation. It has been deployed to a controlled AWS demo account (vf-dev-team5, us-east-1) and one decision was traced live end to end: an Amazon Bedrock–eligible recommendation, deterministic policy authorization, and a **real Amazon SES provider acceptance** with a provider message ID, all under a single correlation ID (see the observed trace in [HARDENING.md](docs/HARDENING.md)). That trace proves provider *acceptance*, not downstream delivery, and covers the email channel only; SMS/RCS/WhatsApp remain sandbox/onboarding-gated. Bundled screenshots, recordings and historical captures are demonstrations, not verification.
@@ -132,13 +136,3 @@ The final sender currently supports collection and the isolated OTP flow. Receip
 [GitHub workflow](.github/workflows/ci.yml) checks pull requests to `main`, pushes to `main`, and manual runs using Node 22: locked install, TypeScript build, Jest coverage, offline CDK synthesis, and artifacts. The workflow has run and passed on recent pull requests; local results are recorded in the [verification report](docs/HARDENING.md).
 
 Tests include actual identity/sender/outreach handlers, production tools, mocked AWS end-to-end flows, session/OTP concurrent consumption, provider/lookup failures, opt-out and foreign-account negative paths. External AWS SDK clients are mocked; carrier/provider onboarding, live IAM effectiveness, real DynamoDB concurrency and actual message delivery still need AWS integration testing. Existing local demo tests remain illustrative, not substitutes for handler tests.
-
-## Hackathon submission
-
-[Checklist](SUBMISSION_CHECKLIST.md) · [Video script](demo/VIDEO_SCRIPT.md) · [Shotlist](demo/VIDEO_SHOTLIST.md) · [MIT license](LICENSE)
-
-**Demo video:** https://www.youtube.com/watch?v=40halypoB6M
-**Repository:** https://github.com/negouseid-ttec/recovery-agent
-**Live demo:** https://d3rtl5b9kojwtc.cloudfront.net
-
-Relevant CDS calls are listed in the AWS table above. Account numbers, private addresses, credentials, enrollment capabilities and internal opportunity IDs are deliberately kept out of public submission materials.
