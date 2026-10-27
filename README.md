@@ -137,4 +137,8 @@ Tests include actual identity/sender/outreach handlers, production tools, mocked
 
 [Checklist](SUBMISSION_CHECKLIST.md) · [Video script](demo/VIDEO_SCRIPT.md) · [Shotlist](demo/VIDEO_SHOTLIST.md) · [MIT license](LICENSE)
 
-Repository: https://github.com/negouseid-ttec/recovery-agent. No published demo-video URL or verified public deployed-UI URL is supplied by this change. Attach them only once actually published and checked. Relevant CDS calls are listed in the AWS table above. Keep account numbers, private addresses, credentials, enrollment capabilities and internal opportunity IDs out of public submission materials.
+**Demo video:** https://www.youtube.com/watch?v=40halypoB6M
+**Repository:** https://github.com/negouseid-ttec/recovery-agent
+**Live demo:** https://d3rtl5b9kojwtc.cloudfront.net
+
+Relevant CDS calls are listed in the AWS table above. Account numbers, private addresses, credentials, enrollment capabilities and internal opportunity IDs are deliberately kept out of public submission materials.
